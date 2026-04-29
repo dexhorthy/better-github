@@ -40,13 +40,16 @@
   - `App` pushes a history entry with the encoded path whenever `path` changes, and listens to `popstate` to restore prior path on back/forward.
   - Added unit tests for `buildPathSearch` covering empty/dir/nested/slash-trimmed inputs and a round trip with `readPathFromSearch`.
   - Browser-verified clicking `src` then `App.tsx` updates the URL to `?path=src%2FApp.tsx`; pressing back restores `?path=src` with the directory listing, and a second back returns to root.
+- Rewrote `README.md` to document the local dev workflow: prerequisites, `.env` setup with `FREESTYLE_API_KEY` and `FREESTYLE_REPO_ID`, `bun run seed:freestyle`, and the two-terminal `bun run api` + `bun run dev` flow.
+  - Added `src/readme.test.ts` asserting the README mentions `bun run dev`, `bun run api`, `bun run seed:freestyle`, both Freestyle env vars, and the `127.0.0.1:5173` dev URL.
+  - Smoke-tested `bun run api` boots and `GET /api/health` returns `{ok:true}` per the README instructions.
 
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add a README that documents how to run the app locally with a single bun command (covering API + Vite dev server, Freestyle env vars, and the seed step).
-Automated Verification: Add a small test or script that checks `README.md` exists and documents `bun run dev`, `bun run api`, and the required `FREESTYLE_API_KEY` / `FREESTYLE_REPO_ID` env vars.
-Browser Verification: Following the README from a fresh clone successfully starts the app at `http://127.0.0.1:5173/` and renders the live repo overview.
+Task: Add a single `bun run start` script that boots both the Hono API and the Vite dev server in parallel so the README's two-terminal step collapses to one command.
+Automated Verification: Add a test that reads `package.json` and asserts a `start` script exists and references both `vite` and `src/server.ts` (or invokes `dev` and `api` concurrently).
+Browser Verification: Running `bun run start` from a fresh clone starts the API on :8787 and the UI on :5173, and the repo overview renders without manually launching a second process.
 
 
 ## Next Up
