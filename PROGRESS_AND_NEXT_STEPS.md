@@ -373,6 +373,12 @@
   - Both runtimes now call through the same shape (`runRepo.get(id)`, `runRepo.update(id, updates)` …); switching adapters is one import change.
   - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Lifted the D1 `AuthDB` adapter out of `src/worker.ts` into a peer `src/auth-d1.ts`:
+  - Added `makeD1AuthDb(d1)` factory exporting the same `AuthDB` shape as `auth.ts` (Bun/Postgres). Mirrors the `workflow-db.ts` / `workflow-db-d1.ts` symmetry — both runtimes now have a named, file-level adapter instead of one being inlined inside route handlers.
+  - `worker.ts` swapped the inlined `makeD1Db` for `makeD1AuthDb(c.env.DB)` and dropped the now-unused `AuthDB` type import.
+  - Net deletion: ~75 lines of D1 SQL + adapter wiring removed from `worker.ts` (the route file is now ~75 lines shorter and route handlers are unchanged).
+  - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 - Consolidated workflow run row mapping into `src/workflow-run-row.ts`:
   - Removed the inline `parseSteps`, `WorkflowRunRow` type, and `workflowRunFromRow` from `src/workflow-db.ts`; it now imports `rowToWorkflowRun` and `WorkflowRunRow` from `workflow-run-row.ts` so the Postgres adapter shares the same row mapper as the D1 adapter (`src/workflow-db-d1.ts`).
   - Updated `src/worker.test.ts` to import `getWorkflowRunD1`/`insertWorkflowRunD1`/`listWorkflowRunsD1` from `./workflow-db-d1` (their actual home) instead of re-exporting through `./worker`.
@@ -399,11 +405,9 @@ Surfaced via `/improve-codebase-architecture`. Ordered by leverage; #1 unblocks 
    - Deletion test: deleting either runtime loses a deploy target, but route logic is fully duplicated — no net complexity reduction from the duplication itself.
    - Shape: one `registerRoutes(app, deps)` module taking `{ authDb, runRepo, broadcaster, secrets, workflowFileFetcher }`; `server.ts` and `worker.ts` shrink to ~30 lines of env wiring. Cleanest after #1 lands.
 
-3. **Make the auth seam symmetric — lift the D1 `AuthDB` adapter out of `worker.ts`.**
-   - Files: `src/auth-core.ts` (199), `src/auth.ts` (109), plus `makeD1Db` inlined in `worker.ts` (~lines 121–195).
-   - Problem: `auth-core.ts` defines `AuthDB` + pure flow (`requestMagicLink`, `verifyMagicLink`, `verifyToken`); `auth.ts` is the Bun/Postgres adapter. The D1 adapter exists but lives buried inside the Worker route handlers. Two adapters = real seam, but only one is named — the asymmetry hides the seam from readers.
-   - Deletion test: `auth-core.ts` earns its keep (deleting it spreads JWT + magic-link state machine across both runtimes). The split itself is fine; the asymmetry is the bug.
-   - Shape: extract `auth-d1.ts` as a peer to `auth.ts`, exporting a `makeD1AuthDb(d1)` factory. Optional rename pass for symmetry (`auth-core.ts` → `auth.ts`, `auth.ts` → `auth-bun.ts`).
+3. **Make the auth seam symmetric — lift the D1 `AuthDB` adapter out of `worker.ts`.** *(done)*
+   - Files: `src/auth-d1.ts` (new), `src/worker.ts`.
+   - `auth-d1.ts` now exports a `makeD1AuthDb(d1)` factory peer to `auth.ts`'s Bun/Postgres adapter. `worker.ts` calls `makeD1AuthDb(c.env.DB)` instead of the previous inlined `makeD1Db`. Both adapters are now named, file-level, and visually parallel to the `workflow-db.ts` / `workflow-db-d1.ts` pair.
 
 4. **Break up `App.tsx` (1740 lines) into per-page modules.**
    - Files: `src/App.tsx`.
