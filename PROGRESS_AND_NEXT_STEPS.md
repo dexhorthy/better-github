@@ -26,23 +26,23 @@
   - Files in the listing are now clickable (`openFile`) so the path can drill into a leaf file.
   - Browser-verified end-to-end: click `src`, click `App.tsx`, breadcrumbs become `better-github / src / App.tsx` and the file source renders.
   - Added an API test asserting `fileContent.text` for `src/App.tsx` contains `function App()`.
+- Added a line-numbered gutter to the file contents viewer:
+  - `LineNumberedCode` renders one source row per text line with a left numeric gutter and source text cell.
+  - Added a DOM-level static render test asserting one `.line-number` cell per file text line.
+  - Browser-verified opening `src/App.tsx` shows a left line-number gutter beside the source.
 
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Render basic syntax-friendly affordances on the file viewer — show a line-numbered gutter for plaintext files like `src/App.tsx`.
-Automated Verification: Component or DOM-level test asserting the viewer renders one line-number cell per line of file text.
-Browser Verification: Open `src/App.tsx` and confirm a left-aligned line-number gutter is shown next to the source.
+Task: Initialize the repository path from the current URL query string so loading `/?path=src` or `/?path=src/App.tsx` opens the matching directory or file directly.
+Automated Verification: Component-level or browser-level test asserting an initial `path` query triggers a request for that path.
+Browser Verification: Open `http://127.0.0.1:5173/?path=src/App.tsx` and confirm the file viewer loads directly without clicking through.
 
 
-## Later
+## Next Up
 
 - Add README that instructs how to run the app locally with a single bun command
 - Add playwright test suite for UI integration tests to regular testing flow
-- Add repository navigation for Issues, Pull Requests, Actions, and Settings.
-- Add file contents view after nested directory browsing exists.
-- Add authentication, sign up with email, and current-user state.
-- Add mutation flows for starring, watching, branching, and opening pull requests.
 
 ## Long Term Goals
 
@@ -50,3 +50,12 @@ Browser Verification: Open `src/App.tsx` and confirm a left-aligned line-number 
 - build a github actions clone on cloudflare workers
 - push and
 - Add a second remote for this repo, and move development to that origin, remove the github remote from this repo
+- Add support for actions matching the github actions yaml spec
+- Add repository navigation for Actions (placeholder for now), and Settings.
+- Add file contents view after nested directory browsing exists.
+- Add authentication, sign up with email, and current-user state.
+
+## Out of scope
+
+- pull requests
+- issues

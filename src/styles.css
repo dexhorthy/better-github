@@ -436,7 +436,7 @@ input {
 
 .file-viewer-body {
   margin: 0;
-  padding: 16px;
+  padding: 0;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.55;
@@ -444,4 +444,36 @@ input {
   overflow-x: auto;
   max-height: 600px;
   overflow-y: auto;
+}
+
+.file-viewer-body code {
+  display: table;
+  min-width: 100%;
+}
+
+.code-line {
+  display: table-row;
+}
+
+.line-number,
+.line-text {
+  display: table-cell;
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+.line-number {
+  min-width: 48px;
+  padding-right: 12px;
+  padding-left: 16px;
+  color: #59636e;
+  text-align: right;
+  user-select: none;
+  background: #f6f8fa;
+  border-right: 1px solid #d0d7de;
+}
+
+.line-text {
+  padding-right: 16px;
+  padding-left: 12px;
 }

@@ -36,6 +36,25 @@ function timeAgo(value: string) {
   return relativeTime.format(Math.round(hours / 24), "day");
 }
 
+export function LineNumberedCode({ text }: { text: string }) {
+  const lines = text.split("\n");
+
+  return (
+    <pre className="file-viewer-body">
+      <code>
+        {lines.map((line, index) => (
+          <span className="code-line" key={`${index}-${line}`}>
+            <span className="line-number" aria-hidden="true">
+              {index + 1}
+            </span>
+            <span className="line-text">{line || " "}</span>
+          </span>
+        ))}
+      </code>
+    </pre>
+  );
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [path, setPath] = useState("");
@@ -178,9 +197,7 @@ function App() {
                 <strong>{fileContent.name}</strong>
                 <span>{fileContent.size} bytes</span>
               </div>
-              <pre className="file-viewer-body">
-                <code>{fileContent.text}</code>
-              </pre>
+              <LineNumberedCode text={fileContent.text} />
             </div>
           ) : (
             <div className="file-list">
