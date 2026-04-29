@@ -215,15 +215,26 @@
   - Added 3 API tests for cancel endpoint (success, 404, 401 without auth).
   - All cancel tests pass; biome lint is clean.
 
+- Added workflow file viewer in UI:
+  - Added `GET /api/repos/:owner/:repo/workflows` endpoint to fetch workflow files from Freestyle Git.
+  - Added `WorkflowFile` type to `types.ts`.
+  - Created `WorkflowEditor` component that lists workflow files and displays YAML content with syntax highlighting.
+  - Added "View workflows" button in ActionsTab to toggle between runs list and workflow editor.
+  - Added CSS styles for workflow editor layout, file list, and content viewer.
+  - Added unit tests for WorkflowEditor component rendering.
+  - Added API tests for workflows endpoint (returns files, requires auth).
+  - All new tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add workflow file editor in UI.
-Automated Verification: Unit test for workflow editor component rendering.
-Browser Verification: Users can view and edit workflow YAML files from the Actions tab.
+Task: Add re-run workflow button for completed runs.
+Automated Verification: API test for POST /api/repos/:owner/:repo/actions/runs with runId parameter to re-run.
+Browser Verification: Users can click "Re-run" button on completed workflow runs to trigger a new run with the same workflow.
 
 ## Next Up
-- Add re-run workflow button for completed runs
+- Add workflow file editing (save changes back to Freestyle Git)
+- Fixed: magic-link email pointed at `/api/auth/verify?token=...` (raw JSON page) instead of `/?token=...` (frontend auto-verify). Updated `sendMagicLinkEmail` in `src/auth-core.ts` to link to the frontend root so the React handler completes the sign-in. TODO: add a regression test asserting the email body contains `${baseUrl}/?token=` and not `/api/auth/verify`.
 
 ## Long Term Goals
 

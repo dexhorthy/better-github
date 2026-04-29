@@ -68,7 +68,9 @@ export function useWorkflowWebSocket(
 
 		return () => {
 			if (subscribedRunId && ws.readyState === WebSocket.OPEN) {
-				ws.send(JSON.stringify({ type: "unsubscribe", runId: subscribedRunId }));
+				ws.send(
+					JSON.stringify({ type: "unsubscribe", runId: subscribedRunId }),
+				);
 			}
 		};
 	}, [subscribedRunId]);

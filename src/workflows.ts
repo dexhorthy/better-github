@@ -112,7 +112,12 @@ export async function executeWorkflowRun(
 	branch: string,
 	_commitSha: string,
 	runId?: string,
-): Promise<{ success: boolean; logs: string; steps: WorkflowStepResult[]; cancelled: boolean }> {
+): Promise<{
+	success: boolean;
+	logs: string;
+	steps: WorkflowStepResult[];
+	cancelled: boolean;
+}> {
 	const logs: string[] = [];
 	const steps: WorkflowStepResult[] = [];
 	let success = true;
@@ -233,5 +238,10 @@ export async function executeWorkflowRun(
 		if (!success || cancelled) break;
 	}
 
-	return { success: success && !cancelled, logs: logs.join("\n"), steps, cancelled };
+	return {
+		success: success && !cancelled,
+		logs: logs.join("\n"),
+		steps,
+		cancelled,
+	};
 }

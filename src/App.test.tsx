@@ -9,6 +9,7 @@ import {
 	RepoHomeLink,
 	RunDetail,
 	readPathFromSearch,
+	WorkflowEditor,
 } from "./App";
 import type { WorkflowRun } from "./types";
 
@@ -291,5 +292,36 @@ describe("RunDetail", () => {
 		);
 
 		expect(html).toContain("No step details available yet");
+	});
+});
+
+describe("WorkflowEditor", () => {
+	test("renders workflow editor with header and back button", () => {
+		const html = renderToStaticMarkup(
+			<WorkflowEditor
+				auth={{ token: "test-token" }}
+				owner="dexhorthy"
+				repo="better-github"
+				onBack={() => {}}
+			/>,
+		);
+
+		expect(html).toContain('data-testid="workflow-editor"');
+		expect(html).toContain('data-testid="workflow-editor-back"');
+		expect(html).toContain("Workflow files");
+		expect(html).toContain("Back to runs");
+	});
+
+	test("shows loading state initially", () => {
+		const html = renderToStaticMarkup(
+			<WorkflowEditor
+				auth={{ token: "test-token" }}
+				owner="dexhorthy"
+				repo="better-github"
+				onBack={() => {}}
+			/>,
+		);
+
+		expect(html).toContain("Loading workflows...");
 	});
 });

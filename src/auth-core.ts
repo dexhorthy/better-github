@@ -107,7 +107,7 @@ export async function sendMagicLinkEmail(
 	apiKey: string,
 	domain: string,
 ): Promise<void> {
-	const link = `${baseUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
+	const link = `${baseUrl}/?token=${encodeURIComponent(token)}`;
 
 	const res = await fetch("https://api.resend.com/emails", {
 		method: "POST",

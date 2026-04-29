@@ -11,6 +11,7 @@ import {
 	Code2,
 	Eye,
 	File,
+	FileCode,
 	Folder,
 	FolderOpen,
 	GitBranch,
@@ -32,6 +33,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
 	GitRepository,
 	RepositoryOverview,
+	WorkflowFile,
 	WorkflowRun,
 	WorkflowStepResult,
 } from "./types";
@@ -415,6 +417,112 @@ type WorkflowRunsState =
 	| { status: "ready"; runs: WorkflowRun[] }
 	| { status: "error"; message: string };
 
+type WorkflowFilesState =
+	| { status: "loading" }
+	| { status: "ready"; files: WorkflowFile[] }
+	| { status: "error"; message: string };
+
+export function WorkflowEditor({
+	auth,
+	owner,
+	repo,
+	onBack,
+}: {
+	auth: { token: string };
+	owner: string;
+	repo: string;
+	onBack: () => void;
+}) {
+	const [state, setState] = useState<WorkflowFilesState>({ status: "loading" });
+	const [selectedFile, setSelectedFile] = useState<string | null>(null);
+
+	useEffect(() => {
+		fetch(
+			`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/workflows`,
+			{
+				headers: { Authorization: `Bearer ${auth.token}` },
+			},
+		)
+			.then((r) => {
+				if (!r.ok) throw new Error("Could not load workflows");
+				return r.json() as Promise<WorkflowFile[]>;
+			})
+			.then((files) => {
+				setState({ status: "ready", files });
+				if (files.length > 0 && !selectedFile) {
+					setSelectedFile(files[0].name);
+				}
+			})
+			.catch((e: Error) => setState({ status: "error", message: e.message }));
+	}, [auth.token, owner, repo, selectedFile]);
+
+	const selectedWorkflow =
+		state.status === "ready"
+			? state.files.find((f) => f.name === selectedFile)
+			: null;
+
+	return (
+		<div className="workflow-editor" data-testid="workflow-editor">
+			<div className="workflow-editor-header">
+				<button
+					type="button"
+					className="workflow-editor-back"
+					onClick={onBack}
+					data-testid="workflow-editor-back"
+				>
+					<ArrowLeft size={16} aria-hidden="true" />
+					Back to runs
+				</button>
+				<h2>Workflow files</h2>
+			</div>
+
+			{state.status === "loading" && (
+				<p className="workflow-editor-status">Loading workflows...</p>
+			)}
+			{state.status === "error" && (
+				<p className="workflow-editor-status workflow-editor-error">
+					{state.message}
+				</p>
+			)}
+			{state.status === "ready" && state.files.length === 0 && (
+				<p className="workflow-editor-status">
+					No workflow files found in .better-github/workflows/
+				</p>
+			)}
+			{state.status === "ready" && state.files.length > 0 && (
+				<div className="workflow-editor-content">
+					<div className="workflow-file-list" data-testid="workflow-file-list">
+						{state.files.map((file) => (
+							<button
+								type="button"
+								className={`workflow-file-item ${selectedFile === file.name ? "selected" : ""}`}
+								key={file.name}
+								onClick={() => setSelectedFile(file.name)}
+								data-testid="workflow-file-item"
+							>
+								<FileCode size={16} aria-hidden="true" />
+								{file.name}
+							</button>
+						))}
+					</div>
+					{selectedWorkflow && (
+						<div
+							className="workflow-file-content"
+							data-testid="workflow-file-content"
+						>
+							<div className="workflow-file-header">
+								<FileCode size={16} aria-hidden="true" />
+								<strong>{selectedWorkflow.name}</strong>
+							</div>
+							<LineNumberedCode text={selectedWorkflow.content} />
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	);
+}
+
 function RunStatusIcon({ status }: { status: WorkflowRun["status"] }) {
 	switch (status) {
 		case "queued":
@@ -447,7 +555,11 @@ function RunStatusIcon({ status }: { status: WorkflowRun["status"] }) {
 			);
 		case "cancelled":
 			return (
-				<Ban size={16} className="run-status-cancelled" aria-label="Cancelled" />
+				<Ban
+					size={16}
+					className="run-status-cancelled"
+					aria-label="Cancelled"
+				/>
 			);
 	}
 }
@@ -625,6 +737,8 @@ export function RunDetail({
 	);
 }
 
+type ActionsView = "runs" | "run-detail" | "workflows";
+
 export function ActionsTab({
 	auth,
 	owner,
@@ -641,22 +755,28 @@ export function ActionsTab({
 	const [cancelling, setCancelling] = useState(false);
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 	const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
+	const [view, setView] = useState<ActionsView>("runs");
 
-	const handleRunUpdate = useCallback((updatedRun: WorkflowRun) => {
-		setState((prev) => {
-			if (prev.status !== "ready") return prev;
-			const existingIndex = prev.runs.findIndex((r) => r.id === updatedRun.id);
-			if (existingIndex >= 0) {
-				const newRuns = [...prev.runs];
-				newRuns[existingIndex] = updatedRun;
-				return { status: "ready", runs: newRuns };
+	const handleRunUpdate = useCallback(
+		(updatedRun: WorkflowRun) => {
+			setState((prev) => {
+				if (prev.status !== "ready") return prev;
+				const existingIndex = prev.runs.findIndex(
+					(r) => r.id === updatedRun.id,
+				);
+				if (existingIndex >= 0) {
+					const newRuns = [...prev.runs];
+					newRuns[existingIndex] = updatedRun;
+					return { status: "ready", runs: newRuns };
+				}
+				return { status: "ready", runs: [updatedRun, ...prev.runs] };
+			});
+			if (selectedRunId === updatedRun.id) {
+				setSelectedRun(updatedRun);
 			}
-			return { status: "ready", runs: [updatedRun, ...prev.runs] };
-		});
-		if (selectedRunId === updatedRun.id) {
-			setSelectedRun(updatedRun);
-		}
-	}, [selectedRunId]);
+		},
+		[selectedRunId],
+	);
 
 	useWorkflowWebSocket(handleRunUpdate, selectedRunId ?? undefined);
 
@@ -752,6 +872,19 @@ export function ActionsTab({
 		}
 	};
 
+	if (view === "workflows") {
+		return (
+			<section className="actions-tab" data-testid="actions-tab">
+				<WorkflowEditor
+					auth={auth}
+					owner={owner}
+					repo={repo}
+					onBack={() => setView("runs")}
+				/>
+			</section>
+		);
+	}
+
 	if (selectedRun) {
 		return (
 			<section className="actions-tab" data-testid="actions-tab">
@@ -769,15 +902,26 @@ export function ActionsTab({
 		<section className="actions-tab" data-testid="actions-tab">
 			<div className="actions-header">
 				<h2>Workflow runs</h2>
-				<button
-					type="button"
-					className="trigger-run-button"
-					onClick={triggerRun}
-					disabled={triggering}
-				>
-					<Play size={16} aria-hidden="true" />
-					{triggering ? "Triggering..." : "Run workflow"}
-				</button>
+				<div className="actions-header-buttons">
+					<button
+						type="button"
+						className="view-workflows-button"
+						onClick={() => setView("workflows")}
+						data-testid="view-workflows-button"
+					>
+						<FileCode size={16} aria-hidden="true" />
+						View workflows
+					</button>
+					<button
+						type="button"
+						className="trigger-run-button"
+						onClick={triggerRun}
+						disabled={triggering}
+					>
+						<Play size={16} aria-hidden="true" />
+						{triggering ? "Triggering..." : "Run workflow"}
+					</button>
+				</div>
 			</div>
 			{state.status === "loading" && (
 				<p className="actions-status">Loading workflow runs...</p>

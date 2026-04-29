@@ -170,8 +170,16 @@ app.post("/api/webhooks/push", async (c) => {
 				commitSha,
 				runId,
 			);
-			const status = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
-			const conclusion = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
+			const status = result.cancelled
+				? "cancelled"
+				: result.success
+					? "success"
+					: "failure";
+			const conclusion = result.cancelled
+				? "cancelled"
+				: result.success
+					? "success"
+					: "failure";
 			await updateAndBroadcastRun(runId, {
 				status,
 				conclusion,
@@ -248,8 +256,16 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 			commitSha,
 			runId,
 		);
-		const status = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
-		const conclusion = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
+		const status = result.cancelled
+			? "cancelled"
+			: result.success
+				? "success"
+				: "failure";
+		const conclusion = result.cancelled
+			? "cancelled"
+			: result.success
+				? "success"
+				: "failure";
 		await updateAndBroadcastRun(runId, {
 			status,
 			conclusion,
@@ -284,6 +300,13 @@ app.post(
 	},
 );
 
+// Workflow files endpoint
+app.get("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
+	const { repo } = c.req.param();
+	const workflowFiles = await fetchWorkflowFiles(repo);
+	return c.json(workflowFiles);
+});
+
 // Less specific route comes after more specific /actions/runs routes
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();
@@ -309,7 +332,10 @@ if (import.meta.main) {
 		port,
 		fetch(req, server) {
 			const url = new URL(req.url);
-			if (url.pathname === "/ws" && req.headers.get("upgrade") === "websocket") {
+			if (
+				url.pathname === "/ws" &&
+				req.headers.get("upgrade") === "websocket"
+			) {
 				const upgraded = server.upgrade(req, {
 					data: { subscribedRunIds: new Set<string>() },
 				});

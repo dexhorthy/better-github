@@ -87,3 +87,8 @@ export type WorkflowRun = {
 	logs?: string;
 	steps?: WorkflowStepResult[];
 };
+
+export type WorkflowFile = {
+	name: string;
+	content: string;
+};

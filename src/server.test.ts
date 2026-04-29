@@ -195,6 +195,30 @@ describe("repository api", () => {
 	});
 });
 
+describe("workflows endpoint", () => {
+	test("returns workflow files for a repository", async () => {
+		const token = await getTestToken();
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows",
+			{ headers: { Authorization: `Bearer ${token}` } },
+		);
+
+		expect(response.status).toBe(200);
+		const workflows = (await response.json()) as {
+			name: string;
+			content: string;
+		}[];
+		expect(Array.isArray(workflows)).toBe(true);
+	});
+
+	test("requires authentication", async () => {
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows",
+		);
+		expect(response.status).toBe(401);
+	});
+});
+
 describe("freestyle seed files", () => {
 	test("collects tracked repository content without ignored environment files", async () => {
 		const files = await collectTrackedTextFiles();

@@ -11,7 +11,9 @@ import type { WorkflowRun } from "./workflows";
 
 type ClientData = { subscribedRunIds: Set<string> };
 
-function createMockWs(): ServerWebSocket<ClientData> & { sentMessages: string[] } {
+function createMockWs(): ServerWebSocket<ClientData> & {
+	sentMessages: string[];
+} {
 	const sentMessages: string[] = [];
 	return {
 		data: { subscribedRunIds: new Set() },
@@ -69,7 +71,10 @@ describe("WebSocket handlers", () => {
 		handleMessage(ws, JSON.stringify({ type: "subscribe", runId: "run-123" }));
 		expect(ws.data.subscribedRunIds.has("run-123")).toBe(true);
 
-		handleMessage(ws, JSON.stringify({ type: "unsubscribe", runId: "run-123" }));
+		handleMessage(
+			ws,
+			JSON.stringify({ type: "unsubscribe", runId: "run-123" }),
+		);
 		expect(ws.data.subscribedRunIds.has("run-123")).toBe(false);
 
 		handleClose(ws);
