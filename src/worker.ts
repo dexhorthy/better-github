@@ -17,6 +17,12 @@ import { buildRepositoryOverview } from "./repository-overview";
 import type { WorkflowStepResult } from "./types";
 import { verifyWebhookSignature } from "./webhook-signature";
 import {
+	getWorkflowRunD1,
+	insertWorkflowRunD1,
+	listWorkflowRunsD1,
+	updateWorkflowRunD1,
+} from "./workflow-db-d1";
+import {
 	executeWorkflowRun,
 	parseWorkflow,
 	requestCancellation,
@@ -254,149 +260,6 @@ const requireAuth: MiddlewareHandler<{
 app.get("/api/repos", requireAuth, (c) => {
 	return c.json(repositories);
 });
-
-type WorkflowRunRow = {
-	id: string;
-	workflow_name: string;
-	repo_owner: string;
-	repo_name: string;
-	branch: string;
-	commit_sha: string;
-	status: string;
-	conclusion: string | null;
-	started_at: string;
-	completed_at: string | null;
-	logs: string | null;
-	steps: string | null;
-};
-
-function parseStepsField(
-	steps: string | null,
-): WorkflowStepResult[] | undefined {
-	if (!steps) return undefined;
-	try {
-		const parsed = JSON.parse(steps) as unknown;
-		if (typeof parsed === "string") return parseStepsField(parsed);
-		return Array.isArray(parsed) ? (parsed as WorkflowStepResult[]) : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function rowToRun(row: WorkflowRunRow): WorkflowRun {
-	return {
-		id: row.id,
-		workflowName: row.workflow_name,
-		repoOwner: row.repo_owner,
-		repoName: row.repo_name,
-		branch: row.branch,
-		commitSha: row.commit_sha,
-		status: row.status as WorkflowRun["status"],
-		conclusion: (row.conclusion ?? undefined) as WorkflowRun["conclusion"],
-		startedAt: row.started_at,
-		completedAt: row.completed_at ?? undefined,
-		logs: row.logs ?? undefined,
-		steps: parseStepsField(row.steps),
-	};
-}
-
-export async function listWorkflowRunsD1(
-	db: D1Database,
-	owner: string,
-	repo: string,
-	limit = 20,
-): Promise<WorkflowRun[]> {
-	const result = await db
-		.prepare(
-			"SELECT * FROM workflow_runs WHERE repo_owner = ? AND repo_name = ? ORDER BY started_at DESC LIMIT ?",
-		)
-		.bind(owner, repo, limit)
-		.all<WorkflowRunRow>();
-	const rows = result.results ?? [];
-	return rows.map(rowToRun);
-}
-
-export async function getWorkflowRunD1(
-	db: D1Database,
-	runId: string,
-): Promise<WorkflowRun | null> {
-	const row = await db
-		.prepare("SELECT * FROM workflow_runs WHERE id = ?")
-		.bind(runId)
-		.first<WorkflowRunRow>();
-	if (!row) return null;
-	return rowToRun(row);
-}
-
-export async function insertWorkflowRunD1(
-	db: D1Database,
-	run: WorkflowRun,
-): Promise<void> {
-	await db
-		.prepare(
-			`INSERT INTO workflow_runs (
-        id,
-        workflow_name,
-        repo_owner,
-        repo_name,
-        branch,
-        commit_sha,
-        status,
-        conclusion,
-        started_at,
-        completed_at,
-        logs,
-        steps
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		)
-		.bind(
-			run.id,
-			run.workflowName,
-			run.repoOwner,
-			run.repoName,
-			run.branch,
-			run.commitSha,
-			run.status,
-			run.conclusion ?? null,
-			run.startedAt,
-			run.completedAt ?? null,
-			run.logs ?? null,
-			run.steps ? JSON.stringify(run.steps) : null,
-		)
-		.run();
-}
-
-export async function updateWorkflowRunD1(
-	db: D1Database,
-	id: string,
-	updates: Partial<
-		Pick<
-			WorkflowRun,
-			"status" | "conclusion" | "completedAt" | "logs" | "steps"
-		>
-	>,
-): Promise<void> {
-	await db
-		.prepare(
-			`UPDATE workflow_runs
-      SET
-        status = COALESCE(?, status),
-        conclusion = COALESCE(?, conclusion),
-        completed_at = COALESCE(?, completed_at),
-        logs = COALESCE(?, logs),
-        steps = COALESCE(?, steps)
-      WHERE id = ?`,
-		)
-		.bind(
-			updates.status ?? null,
-			updates.conclusion ?? null,
-			updates.completedAt ?? null,
-			updates.logs ?? null,
-			updates.steps ? JSON.stringify(updates.steps) : null,
-			id,
-		)
-		.run();
-}
 
 app.get(
 	"/api/repos/:owner/:repo/actions/runs/:runId",

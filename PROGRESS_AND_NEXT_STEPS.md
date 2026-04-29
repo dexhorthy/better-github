@@ -365,11 +365,44 @@
   - End-to-end verified: `bun run seed:freestyle better-github` pushed commit `f085cfa` (66 files) and `Push webhook → 200` returned `triggered: [{CI}, {Deploy}]` from the deployed Worker, confirming both `.better-github/workflows/ci.yml` and `deploy.yml` queued runs in remote D1 without any manual curl.
   - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Consolidated workflow run row mapping into `src/workflow-run-row.ts`:
+  - Removed the inline `parseSteps`, `WorkflowRunRow` type, and `workflowRunFromRow` from `src/workflow-db.ts`; it now imports `rowToWorkflowRun` and `WorkflowRunRow` from `workflow-run-row.ts` so the Postgres adapter shares the same row mapper as the D1 adapter (`src/workflow-db-d1.ts`).
+  - Updated `src/worker.test.ts` to import `getWorkflowRunD1`/`insertWorkflowRunD1`/`listWorkflowRunsD1` from `./workflow-db-d1` (their actual home) instead of re-exporting through `./worker`.
+  - Net deletion: ~45 lines of duplicated row-mapping logic. Single source of truth for translating a `workflow_runs` row into a `WorkflowRun` regardless of runtime.
+  - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 ## Next Up
 
 - build a github actions clone on freestyle sandboxes/vms - ONLY the bare minimum to deploy better-github itself w/ wrangler on pushes
 - add .better-github/workflows/ci.yml to run tests on push/merge to main
 - add .better-github/workflows/deploy.yml to deploy cloudflare stack on push/merge to main
+
+### Architecture deepening opportunities
+
+Surfaced via `/improve-codebase-architecture`. Ordered by leverage; #1 unblocks #2.
+
+1. **Unify workflow persistence behind a `WorkflowRunRepository` seam.** *(partially done)*
+   - Files: `src/workflow-db.ts`, `src/workflow-db-d1.ts`, `src/workflow-run-row.ts`.
+   - First step landed: `workflow-db.ts` no longer re-implements `parseSteps`/`workflowRunFromRow`/`WorkflowRunRow` — both adapters now share `rowToWorkflowRun` from `workflow-run-row.ts`.
+   - Still open: introduce a named `WorkflowRunRepository` interface so `server.ts` and `worker.ts` stop importing the specific runtime functions (`getWorkflowRun` vs `getWorkflowRunD1`) and call through one seam.
+
+2. **Collapse the duplicated route table in `server.ts` and `worker.ts`.**
+   - Files: `src/server.ts` (394), `src/worker.ts` (576).
+   - Problem: both define the same ~12 Hono routes (`/api/auth/*`, `/api/repos/:owner/:repo/actions/runs*`, `/api/repos/:owner/:repo/workflows*`, `/api/webhooks/push`) with nearly identical handler bodies. Differences are wiring (`getWorkflowRun` vs `getWorkflowRunD1`, local broadcaster vs Durable Object, Bun env vs `c.env`). The runtimes already drift — `worker.ts` inlines a `makeD1Db` factory inside route handlers.
+   - Deletion test: deleting either runtime loses a deploy target, but route logic is fully duplicated — no net complexity reduction from the duplication itself.
+   - Shape: one `registerRoutes(app, deps)` module taking `{ authDb, runRepo, broadcaster, secrets, workflowFileFetcher }`; `server.ts` and `worker.ts` shrink to ~30 lines of env wiring. Cleanest after #1 lands.
+
+3. **Make the auth seam symmetric — lift the D1 `AuthDB` adapter out of `worker.ts`.**
+   - Files: `src/auth-core.ts` (199), `src/auth.ts` (109), plus `makeD1Db` inlined in `worker.ts` (~lines 121–195).
+   - Problem: `auth-core.ts` defines `AuthDB` + pure flow (`requestMagicLink`, `verifyMagicLink`, `verifyToken`); `auth.ts` is the Bun/Postgres adapter. The D1 adapter exists but lives buried inside the Worker route handlers. Two adapters = real seam, but only one is named — the asymmetry hides the seam from readers.
+   - Deletion test: `auth-core.ts` earns its keep (deleting it spreads JWT + magic-link state machine across both runtimes). The split itself is fine; the asymmetry is the bug.
+   - Shape: extract `auth-d1.ts` as a peer to `auth.ts`, exporting a `makeD1AuthDb(d1)` factory. Optional rename pass for symmetry (`auth-core.ts` → `auth.ts`, `auth.ts` → `auth-bun.ts`).
+
+4. **Break up `App.tsx` (1740 lines) into per-page modules.**
+   - Files: `src/App.tsx`.
+   - Problem: declares 9 inline subcomponents (`AuthForm`, `RepoBreadcrumb`, `ReadmePreview`, `RepoList`, `LineNumberedCode`, `WorkflowEditor`, `RunDetail`, `ActionsTab`, `RepoBrowser`) plus status-icon helpers, and runs ~4 state machines (auth, route, repo overview, runs) cascading via prop callbacks. Subcomponents can't be tested in isolation — `App.test.tsx` reaches them through the megacomponent surface.
+   - Deletion test: real complexity, but concentrated wrong. A page-shaped split (`RepoListPage`, `RepoDetailPage`, `ActionsPage`) lets each page be tested through its own interface.
+   - Shape: page-shaped split with a thin top-level router and small hooks (`useAuth`, `useRepoRoute`). Largest yard work, lowest risk per move — can land incrementally one page at a time.
 
 ## Long Term Goals
 

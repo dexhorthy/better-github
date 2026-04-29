@@ -4,15 +4,17 @@ import { signJwt } from "./auth-core";
 import { computeWebhookSignature } from "./webhook-signature";
 import {
 	_getLastRunPromise,
-	getWorkflowRunD1,
-	insertWorkflowRunD1,
-	listWorkflowRunsD1,
 	resetBroadcaster,
 	resetWorkflowExecutor,
 	setBroadcaster,
 	setWorkflowExecutor,
 	app as workerApp,
 } from "./worker";
+import {
+	getWorkflowRunD1,
+	insertWorkflowRunD1,
+	listWorkflowRunsD1,
+} from "./workflow-db-d1";
 import { WorkflowBroadcaster } from "./worker-broadcaster-do";
 import type { WorkflowRun } from "./workflows";
 
