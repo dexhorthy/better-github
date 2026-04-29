@@ -21,6 +21,38 @@ function parseSteps(
 	return Array.isArray(parsed) ? (parsed as WorkflowStepResult[]) : undefined;
 }
 
+type WorkflowRunRow = {
+	id: string;
+	workflow_name: string;
+	repo_owner: string;
+	repo_name: string;
+	branch: string;
+	commit_sha: string;
+	status: string;
+	conclusion: string | null;
+	started_at: string;
+	completed_at: string | null;
+	logs: string | null;
+	steps: WorkflowStepResult[] | string | null;
+};
+
+function workflowRunFromRow(row: WorkflowRunRow): WorkflowRun {
+	return {
+		id: row.id,
+		workflowName: row.workflow_name,
+		repoOwner: row.repo_owner,
+		repoName: row.repo_name,
+		branch: row.branch,
+		commitSha: row.commit_sha,
+		status: row.status as WorkflowRun["status"],
+		conclusion: row.conclusion as WorkflowRun["conclusion"],
+		startedAt: row.started_at,
+		completedAt: row.completed_at ?? undefined,
+		logs: row.logs ?? undefined,
+		steps: parseSteps(row.steps),
+	};
+}
+
 export async function ensureWorkflowRunsTable(): Promise<void> {
 	if (initialized) return;
 	await sql`
@@ -87,39 +119,11 @@ export async function updateWorkflowRun(
 export async function getWorkflowRun(id: string): Promise<WorkflowRun | null> {
 	await ensureWorkflowRunsTable();
 	const rows = await sql<
-		{
-			id: string;
-			workflow_name: string;
-			repo_owner: string;
-			repo_name: string;
-			branch: string;
-			commit_sha: string;
-			status: string;
-			conclusion: string | null;
-			started_at: string;
-			completed_at: string | null;
-			logs: string | null;
-			steps: WorkflowStepResult[] | string | null;
-		}[]
+		WorkflowRunRow[]
 	>`SELECT * FROM workflow_runs WHERE id = ${id}`;
 
 	const row = rows[0];
-	if (!row) return null;
-
-	return {
-		id: row.id,
-		workflowName: row.workflow_name,
-		repoOwner: row.repo_owner,
-		repoName: row.repo_name,
-		branch: row.branch,
-		commitSha: row.commit_sha,
-		status: row.status as WorkflowRun["status"],
-		conclusion: row.conclusion as WorkflowRun["conclusion"],
-		startedAt: row.started_at,
-		completedAt: row.completed_at ?? undefined,
-		logs: row.logs ?? undefined,
-		steps: parseSteps(row.steps),
-	};
+	return row ? workflowRunFromRow(row) : null;
 }
 
 export async function listWorkflowRuns(
@@ -129,34 +133,8 @@ export async function listWorkflowRuns(
 ): Promise<WorkflowRun[]> {
 	await ensureWorkflowRunsTable();
 	const rows = await sql<
-		{
-			id: string;
-			workflow_name: string;
-			repo_owner: string;
-			repo_name: string;
-			branch: string;
-			commit_sha: string;
-			status: string;
-			conclusion: string | null;
-			started_at: string;
-			completed_at: string | null;
-			logs: string | null;
-			steps: WorkflowStepResult[] | string | null;
-		}[]
+		WorkflowRunRow[]
 	>`SELECT * FROM workflow_runs WHERE repo_owner = ${repoOwner} AND repo_name = ${repoName} ORDER BY started_at DESC LIMIT ${limit}`;
 
-	return rows.map((row) => ({
-		id: row.id,
-		workflowName: row.workflow_name,
-		repoOwner: row.repo_owner,
-		repoName: row.repo_name,
-		branch: row.branch,
-		commitSha: row.commit_sha,
-		status: row.status as WorkflowRun["status"],
-		conclusion: row.conclusion as WorkflowRun["conclusion"],
-		startedAt: row.started_at,
-		completedAt: row.completed_at ?? undefined,
-		logs: row.logs ?? undefined,
-		steps: parseSteps(row.steps),
-	}));
+	return rows.map(workflowRunFromRow);
 }
