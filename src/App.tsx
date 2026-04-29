@@ -36,6 +36,12 @@ function timeAgo(value: string) {
   return relativeTime.format(Math.round(hours / 24), "day");
 }
 
+export function readPathFromSearch(search: string): string {
+  const params = new URLSearchParams(search);
+  const value = params.get("path") ?? "";
+  return value.replace(/^\/+|\/+$/g, "");
+}
+
 export function LineNumberedCode({ text }: { text: string }) {
   const lines = text.split("\n");
 
@@ -57,7 +63,9 @@ export function LineNumberedCode({ text }: { text: string }) {
 
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState(() =>
+    typeof window === "undefined" ? "" : readPathFromSearch(window.location.search),
+  );
 
   useEffect(() => {
     const params = new URLSearchParams();

@@ -30,13 +30,18 @@
   - `LineNumberedCode` renders one source row per text line with a left numeric gutter and source text cell.
   - Added a DOM-level static render test asserting one `.line-number` cell per file text line.
   - Browser-verified opening `src/App.tsx` shows a left line-number gutter beside the source.
+- Initialized the repository path from the URL query string:
+  - Added `readPathFromSearch(search)` helper that parses `?path=...` and trims surrounding slashes.
+  - `App` seeds its `path` state from `window.location.search` so deep links open the matching directory or file directly.
+  - Added unit tests covering empty, directory, nested file, and slash-trimmed query strings.
+  - Browser-verified `http://127.0.0.1:5173/?path=src/App.tsx` loads the file viewer with the `better-github / src / App.tsx` breadcrumb and `function App()` source on first paint.
 
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Initialize the repository path from the current URL query string so loading `/?path=src` or `/?path=src/App.tsx` opens the matching directory or file directly.
-Automated Verification: Component-level or browser-level test asserting an initial `path` query triggers a request for that path.
-Browser Verification: Open `http://127.0.0.1:5173/?path=src/App.tsx` and confirm the file viewer loads directly without clicking through.
+Task: Sync the URL when the user navigates so clicking directories or files updates `window.location.search` (and back/forward restores the previous path) — pairs with the deep-link initialization just shipped.
+Automated Verification: Test that updating `path` via the existing setters pushes a matching `?path=...` history entry, and that a `popstate` event restores the previous path.
+Browser Verification: Click `src` then `App.tsx`, confirm the URL becomes `/?path=src/App.tsx`, then press the browser back button and confirm the directory listing returns.
 
 
 ## Next Up
