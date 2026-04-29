@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "api": "bun run src/server.ts",
+    "seed:freestyle": "bun run src/seed-freestyle-repo.ts",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "lint": "bun run typecheck",

@@ -52,8 +52,6 @@ export type FreestyleRepoData = {
   files: { type: "directory" | "file"; name: string; lastCommit: string; updatedAt: string }[];
 };
 
-const GENERIC_AVATAR = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png";
-
 function makeGitUser(name: string, email: string): GitUser {
   return {
     login: email.split("@")[0] ?? name,
@@ -62,10 +60,7 @@ function makeGitUser(name: string, email: string): GitUser {
   };
 }
 
-export async function fetchFreestyleRepoData(
-  repoName: string,
-  owner: string,
-): Promise<FreestyleRepoData | null> {
+export async function fetchFreestyleRepoData(repoName: string): Promise<FreestyleRepoData | null> {
   try {
     const repoId = await findFreestyleRepoId(repoName);
     if (!repoId) return null;
@@ -108,10 +103,11 @@ export async function fetchFreestyleRepoData(
     if (contentsResult.status === "fulfilled") {
       const contents = contentsResult.value;
       if (contents.type === "dir") {
+        const latestMessage = commits[0]?.message ?? "Synced from Freestyle Git";
         files = contents.entries.map((entry) => ({
           type: entry.type === "dir" ? "directory" : "file",
           name: entry.name,
-          lastCommit: "",
+          lastCommit: latestMessage,
           updatedAt: new Date().toISOString(),
         }));
       }

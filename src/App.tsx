@@ -209,7 +209,7 @@ function App() {
             <h2>Automation</h2>
             <div className="meta-row">
               <Bot size={14} aria-hidden="true" />
-              Freestyle Git integration pending
+              Freestyle Git content synced
             </div>
           </section>
         </aside>

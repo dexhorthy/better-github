@@ -14,5 +14,7 @@ you are working on cloning github
 3. Implement the single highest priority task in PROGRESS_AND_NEXT_STEPS.md
 4. test and fix any ui changes with the agent-browser skill
 5. run the tests and linting and ensure they pass
-6. commit and push your changes
+6. update PROGRESS_AND_NEXT_STEPS.md
+7. update research_findings/ with anything you learned about external resources
+7. commit and push your changes
 </instructions>

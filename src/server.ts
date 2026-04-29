@@ -16,7 +16,7 @@ app.get("/api/repos/:owner/:repo", async (c) => {
     return c.json({ message: "Repository not found" }, 404);
   }
 
-  const liveData = await fetchFreestyleRepoData(repo, owner);
+  const liveData = await fetchFreestyleRepoData(repo);
 
   const overview: RepositoryOverview = {
     repository: liveData
