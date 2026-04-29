@@ -17,6 +17,7 @@ function parseSteps(
 	if (typeof steps !== "string") return steps;
 
 	const parsed = JSON.parse(steps) as unknown;
+	if (typeof parsed === "string") return parseSteps(parsed);
 	return Array.isArray(parsed) ? (parsed as WorkflowStepResult[]) : undefined;
 }
 
@@ -40,6 +41,10 @@ export async function ensureWorkflowRunsTable(): Promise<void> {
     )
   `;
 	// Add steps column if missing (for existing tables)
+	await sql`
+    ALTER TABLE workflow_runs
+    ADD COLUMN IF NOT EXISTS logs TEXT
+  `.catch(() => {});
 	await sql`
     ALTER TABLE workflow_runs
     ADD COLUMN IF NOT EXISTS steps JSONB

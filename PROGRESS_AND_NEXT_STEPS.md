@@ -269,20 +269,33 @@
   - Test verifies token is URL-encoded in the link.
   - All 80 tests pass; biome lint is clean.
 
+- Added workflow run logs persistence hardening:
+  - `workflow_runs.logs` is now idempotently backfilled in `ensureWorkflowRunsTable()` for existing Postgres databases.
+  - D1 initial migration now creates `workflow_runs` with `logs` and `steps` columns so deployed databases can persist run output.
+  - Added `src/workflow-db.test.ts` covering persisted full run logs, persisted step logs, and legacy JSON-string encoded step payloads.
+  - Fixed `parseSteps()` to normalize double-encoded legacy step JSON so run detail responses always return an array for the UI.
+  - Updated Playwright e2e setup to authenticate through the magic-link test path and browse `/:owner/:repo` routes after the repo-list routing change.
+  - Browser-verified run detail shows persisted full logs and expandable step logs.
+  - All 83 unit tests pass; typecheck and Biome lint are clean; all 4 Playwright e2e tests pass.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add workflow run logs persistence (save VM stdout/stderr to database for later retrieval).
-Automated Verification: API test that creates a run, waits for completion, and verifies logs are returned in the run detail.
-Browser Verification: Verify run detail page shows step logs after run completes.
+Task: Add D1-backed Actions API routes to `src/worker.ts` for deployed workflow run listing/detail.
+Automated Verification: Worker-level test or integration test that authenticated `GET /api/repos/:owner/:repo/actions/runs` returns persisted runs from D1.
+Browser Verification: Verify the deployed/local Worker build can open the Actions tab and load workflow runs.
 
 ## Next Up
 
-## Long Term Goals
-
-- build a github actions clone on freestyle sandboxes
+- build a github actions clone on freestyle sandboxes/vms - ONLY the bare minimum to deploy better-github itself w/ wrangler on pushes
 - add .better-github/workflows/ci.yml to run tests on push/merge to main
 - add .better-github/workflows/deploy.yml to deploy cloudflare stack on push/merge to main
+
+## Long Term Goals
+
+- Add public/private repo specifications and add a public repo list to the default un-authed route, move signin to its own route with a "log in or sign up" button in the header
+- reskin the app to have a minimalist terminal-ui theme - all font the same size, fixed width font everywhere, only colors/dimming/bold for differentiation
+- add hotkeys for nav, arrows and vim-style j/k/h/l/esc using useHotkeys
 - Add repository navigation for Actions (placeholder for now), and Settings.
 - Add file contents view after nested directory browsing exists.
 

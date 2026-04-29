@@ -1,8 +1,30 @@
 import { expect, test } from "@playwright/test";
+import { _insertTestToken } from "../src/auth";
+
+async function authenticate(page: import("@playwright/test").Page) {
+	const email = `e2e-${Date.now()}-${Math.random()}@example.com`;
+	const rawToken = `e2e-token-${crypto.randomUUID()}`;
+	await _insertTestToken(email, rawToken, Date.now() + 60_000);
+	const response = await page.request.get(
+		`/api/auth/verify?token=${encodeURIComponent(rawToken)}`,
+	);
+	const body = (await response.json()) as { token: string };
+	await page.addInitScript(
+		({ token, email }) => {
+			localStorage.setItem("better-github-token", token);
+			localStorage.setItem("better-github-email", email);
+		},
+		{ token: body.token, email },
+	);
+}
+
+test.beforeEach(async ({ page }) => {
+	await authenticate(page);
+});
 
 test.describe("root page", () => {
 	test("renders file list and README section", async ({ page }) => {
-		await page.goto("/");
+		await page.goto("/dexhorthy/better-github");
 		await page.waitForSelector(".file-row");
 
 		const fileRows = page.locator(".file-row");
@@ -19,7 +41,7 @@ test.describe("root page", () => {
 
 test.describe("directory navigation", () => {
 	test("clicking src renders src file entries", async ({ page }) => {
-		await page.goto("/");
+		await page.goto("/dexhorthy/better-github");
 		await page.waitForSelector(".file-row");
 
 		await page.getByRole("button", { name: "src" }).click();
@@ -37,7 +59,7 @@ test.describe("directory navigation", () => {
 	test("clicking App.tsx renders file viewer with line numbers", async ({
 		page,
 	}) => {
-		await page.goto("/?path=src");
+		await page.goto("/dexhorthy/better-github?path=src");
 		await page.waitForSelector(".file-row");
 
 		await page.getByRole("button", { name: "App.tsx" }).click();
@@ -58,7 +80,7 @@ test.describe("repo home link", () => {
 	test("clicking the repo name from a file view resets to root", async ({
 		page,
 	}) => {
-		await page.goto("/?path=src/App.tsx");
+		await page.goto("/dexhorthy/better-github?path=src/App.tsx");
 		await page.waitForSelector(".file-viewer");
 
 		// Click the repo home link
