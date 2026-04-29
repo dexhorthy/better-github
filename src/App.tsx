@@ -1,5 +1,6 @@
 import {
 	ArrowLeft,
+	Ban,
 	BookOpen,
 	Bot,
 	CheckCircle2,
@@ -24,6 +25,7 @@ import {
 	Search,
 	SkipForward,
 	Star,
+	StopCircle,
 	XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -443,6 +445,10 @@ function RunStatusIcon({ status }: { status: WorkflowRun["status"] }) {
 					aria-label="Failure"
 				/>
 			);
+		case "cancelled":
+			return (
+				<Ban size={16} className="run-status-cancelled" aria-label="Cancelled" />
+			);
 	}
 }
 
@@ -490,11 +496,16 @@ function StepStatusIcon({ status }: { status: WorkflowStepResult["status"] }) {
 export function RunDetail({
 	run,
 	onBack,
+	onCancel,
+	cancelling = false,
 }: {
 	run: WorkflowRun;
 	onBack: () => void;
+	onCancel?: () => void;
+	cancelling?: boolean;
 }) {
 	const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+	const isCancellable = run.status === "queued" || run.status === "in_progress";
 
 	const toggleStep = (stepName: string) => {
 		setExpandedSteps((prev) => {
@@ -529,6 +540,18 @@ export function RunDetail({
 				<span className="run-status-badge" data-status={run.status}>
 					{run.status === "in_progress" ? "In progress" : run.status}
 				</span>
+				{isCancellable && onCancel && (
+					<button
+						type="button"
+						className="cancel-run-button"
+						onClick={onCancel}
+						disabled={cancelling}
+						data-testid="cancel-run-button"
+					>
+						<StopCircle size={16} aria-hidden="true" />
+						{cancelling ? "Cancelling..." : "Cancel"}
+					</button>
+				)}
 			</div>
 			<div className="run-detail-meta">
 				<span>{run.branch}</span>
@@ -615,6 +638,7 @@ export function ActionsTab({
 }) {
 	const [state, setState] = useState<WorkflowRunsState>({ status: "loading" });
 	const [triggering, setTriggering] = useState(false);
+	const [cancelling, setCancelling] = useState(false);
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 	const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
 
@@ -711,10 +735,32 @@ export function ActionsTab({
 		}
 	};
 
+	const cancelRun = async (runId: string) => {
+		setCancelling(true);
+		try {
+			await fetch(
+				`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/cancel`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${auth.token}`,
+					},
+				},
+			);
+		} finally {
+			setCancelling(false);
+		}
+	};
+
 	if (selectedRun) {
 		return (
 			<section className="actions-tab" data-testid="actions-tab">
-				<RunDetail run={selectedRun} onBack={() => setSelectedRunId(null)} />
+				<RunDetail
+					run={selectedRun}
+					onBack={() => setSelectedRunId(null)}
+					onCancel={() => cancelRun(selectedRun.id)}
+					cancelling={cancelling}
+				/>
 			</section>
 		);
 	}

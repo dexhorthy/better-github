@@ -30,13 +30,27 @@ export type WorkflowRun = {
 	repoName: string;
 	branch: string;
 	commitSha: string;
-	status: "queued" | "in_progress" | "success" | "failure";
+	status: "queued" | "in_progress" | "success" | "failure" | "cancelled";
 	conclusion?: "success" | "failure" | "cancelled";
 	startedAt: string;
 	completedAt?: string;
 	logs?: string;
 	steps?: WorkflowStepResult[];
 };
+
+const cancelledRuns = new Set<string>();
+
+export function requestCancellation(runId: string): void {
+	cancelledRuns.add(runId);
+}
+
+export function isCancelled(runId: string): boolean {
+	return cancelledRuns.has(runId);
+}
+
+export function clearCancellation(runId: string): void {
+	cancelledRuns.delete(runId);
+}
 
 type WorkflowYaml = {
 	name?: string;
@@ -97,12 +111,21 @@ export async function executeWorkflowRun(
 	repoUrl: string,
 	branch: string,
 	_commitSha: string,
-): Promise<{ success: boolean; logs: string; steps: WorkflowStepResult[] }> {
+	runId?: string,
+): Promise<{ success: boolean; logs: string; steps: WorkflowStepResult[]; cancelled: boolean }> {
 	const logs: string[] = [];
 	const steps: WorkflowStepResult[] = [];
 	let success = true;
+	let cancelled = false;
 
 	for (const [_jobId, job] of Object.entries(workflow.jobs)) {
+		if (runId && isCancelled(runId)) {
+			logs.push("\n=== Run cancelled ===\n");
+			cancelled = true;
+			clearCancellation(runId);
+			break;
+		}
+
 		logs.push(`\n=== Job: ${job.name} ===\n`);
 
 		if (job.runsOn !== "freestyle-vm") {
@@ -122,6 +145,13 @@ export async function executeWorkflowRun(
 			try {
 				let shouldSkipRemaining = false;
 				for (const step of job.steps) {
+					if (runId && isCancelled(runId)) {
+						logs.push("\n=== Run cancelled ===\n");
+						cancelled = true;
+						clearCancellation(runId);
+						break;
+					}
+
 					const stepResult: WorkflowStepResult = {
 						name: step.name,
 						status: shouldSkipRemaining ? "skipped" : "running",
@@ -200,8 +230,8 @@ export async function executeWorkflowRun(
 			success = false;
 		}
 
-		if (!success) break;
+		if (!success || cancelled) break;
 	}
 
-	return { success, logs: logs.join("\n"), steps };
+	return { success: success && !cancelled, logs: logs.join("\n"), steps, cancelled };
 }

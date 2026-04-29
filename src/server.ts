@@ -28,6 +28,7 @@ import {
 import {
 	executeWorkflowRun,
 	parseWorkflow,
+	requestCancellation,
 	shouldTrigger,
 	type WorkflowRun,
 } from "./workflows";
@@ -167,10 +168,13 @@ app.post("/api/webhooks/push", async (c) => {
 				repoUrl,
 				branch,
 				commitSha,
+				runId,
 			);
+			const status = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
+			const conclusion = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
 			await updateAndBroadcastRun(runId, {
-				status: result.success ? "success" : "failure",
-				conclusion: result.success ? "success" : "failure",
+				status,
+				conclusion,
 				completedAt: new Date().toISOString(),
 				logs: result.logs,
 				steps: result.steps,
@@ -242,10 +246,13 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 			repoUrl,
 			branch,
 			commitSha,
+			runId,
 		);
+		const status = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
+		const conclusion = result.cancelled ? "cancelled" : result.success ? "success" : "failure";
 		await updateAndBroadcastRun(runId, {
-			status: result.success ? "success" : "failure",
-			conclusion: result.success ? "success" : "failure",
+			status,
+			conclusion,
 			completedAt: new Date().toISOString(),
 			logs: result.logs,
 			steps: result.steps,
@@ -254,6 +261,28 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 
 	return c.json({ id: runId, status: "queued" }, 201);
 });
+
+app.post(
+	"/api/repos/:owner/:repo/actions/runs/:runId/cancel",
+	requireAuth,
+	async (c) => {
+		const { runId } = c.req.param();
+		const run = await getWorkflowRun(runId);
+		if (!run) return c.json({ error: "Run not found" }, 404);
+		if (run.status !== "queued" && run.status !== "in_progress") {
+			return c.json({ error: "Run is not cancellable" }, 400);
+		}
+		requestCancellation(runId);
+		if (run.status === "queued") {
+			await updateAndBroadcastRun(runId, {
+				status: "cancelled",
+				conclusion: "cancelled",
+				completedAt: new Date().toISOString(),
+			});
+		}
+		return c.json({ ok: true });
+	},
+);
 
 // Less specific route comes after more specific /actions/runs routes
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {

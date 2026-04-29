@@ -897,6 +897,11 @@ input {
 	color: #cf222e;
 }
 
+.run-status-badge[data-status="cancelled"] {
+	background: #eaeef2;
+	color: #59636e;
+}
+
 .run-status-queued {
 	color: #0969da;
 }
@@ -912,6 +917,35 @@ input {
 
 .run-status-failure {
 	color: #cf222e;
+}
+
+.run-status-cancelled {
+	color: #59636e;
+}
+
+.cancel-run-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	margin-left: auto;
+	font-size: 13px;
+	font-weight: 500;
+	color: #cf222e;
+	background: #ffebe9;
+	border: 1px solid #cf222e30;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.cancel-run-button:hover:not(:disabled) {
+	background: #ffc4c0;
+}
+
+.cancel-run-button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
 }
 
 @keyframes spin {

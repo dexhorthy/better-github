@@ -259,6 +259,59 @@ describe("workflow runs api", () => {
 		);
 		expect(res.status).toBe(404);
 	});
+
+	test("POST /api/repos/:owner/:repo/actions/runs/:runId/cancel returns 200 for queued run", async () => {
+		const token = await getTestToken();
+
+		// Create a workflow run
+		const createRes = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ branch: "main" }),
+			},
+		);
+		expect(createRes.status).toBe(201);
+		const { id: runId } = (await createRes.json()) as { id: string };
+
+		// Cancel the run
+		const cancelRes = await app.request(
+			`/api/repos/dexhorthy/better-github/actions/runs/${runId}/cancel`,
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+			},
+		);
+		expect(cancelRes.status).toBe(200);
+		const body = (await cancelRes.json()) as { ok: boolean };
+		expect(body.ok).toBe(true);
+	});
+
+	test("POST /api/repos/:owner/:repo/actions/runs/:runId/cancel returns 404 for unknown run", async () => {
+		const token = await getTestToken();
+		const res = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs/nonexistent-id/cancel",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+			},
+		);
+		expect(res.status).toBe(404);
+	});
+
+	test("POST /api/repos/:owner/:repo/actions/runs/:runId/cancel without auth returns 401", async () => {
+		const res = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs/some-id/cancel",
+			{
+				method: "POST",
+			},
+		);
+		expect(res.status).toBe(401);
+	});
 });
 
 describe("webhook api", () => {

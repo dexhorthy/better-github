@@ -80,7 +80,7 @@ export type WorkflowRun = {
 	repoName: string;
 	branch: string;
 	commitSha: string;
-	status: "queued" | "in_progress" | "success" | "failure";
+	status: "queued" | "in_progress" | "success" | "failure" | "cancelled";
 	conclusion?: "success" | "failure" | "cancelled";
 	startedAt: string;
 	completedAt?: string;

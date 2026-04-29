@@ -205,15 +205,25 @@
   - Browser-verified: triggering a workflow run shows instant status transitions (queued → in_progress → success/failure) without manual refresh.
   - All 59 unit tests pass; biome lint is clean.
 
+- Added workflow run cancellation:
+  - Added "cancelled" status to `WorkflowRun` type in both `types.ts` and `workflows.ts`.
+  - Created cancellation registry (`requestCancellation`, `isCancelled`, `clearCancellation`) in `workflows.ts` to signal running workflows to stop.
+  - Updated `executeWorkflowRun` to check for cancellation between steps and jobs.
+  - Added `POST /api/repos/:owner/:repo/actions/runs/:runId/cancel` endpoint that marks queued runs as cancelled immediately or signals in-progress runs to stop.
+  - Added Cancel button in `RunDetail` component for queued/in_progress runs.
+  - Added `RunStatusIcon` and `run-status-badge` styles for cancelled status.
+  - Added 3 API tests for cancel endpoint (success, 404, 401 without auth).
+  - All cancel tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add workflow run cancellation button to stop in-progress runs.
-Automated Verification: API test for POST `/api/repos/:owner/:repo/actions/runs/:runId/cancel` endpoint returning 200.
-Browser Verification: Clicking "Cancel" on an in-progress run stops execution and updates status to "cancelled".
+Task: Add workflow file editor in UI.
+Automated Verification: Unit test for workflow editor component rendering.
+Browser Verification: Users can view and edit workflow YAML files from the Actions tab.
 
 ## Next Up
-- Add workflow file editor in UI
+- Add re-run workflow button for completed runs
 
 ## Long Term Goals
 
