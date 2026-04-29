@@ -13,6 +13,7 @@ import {
 	GitPullRequest,
 	History,
 	LockKeyhole,
+	LogOut,
 	Search,
 	Star,
 } from "lucide-react";
@@ -24,6 +25,157 @@ type LoadState =
 	| { status: "loading" }
 	| { status: "ready"; data: RepositoryOverview }
 	| { status: "error"; message: string };
+
+type AuthState =
+	| { status: "unauthenticated" }
+	| { status: "authenticated"; token: string; email: string };
+
+const AUTH_TOKEN_KEY = "better-github-token";
+const AUTH_EMAIL_KEY = "better-github-email";
+
+function loadStoredAuth(): AuthState {
+	if (typeof window === "undefined") return { status: "unauthenticated" };
+	const token = localStorage.getItem(AUTH_TOKEN_KEY);
+	const email = localStorage.getItem(AUTH_EMAIL_KEY);
+	if (token && email) return { status: "authenticated", token, email };
+	return { status: "unauthenticated" };
+}
+
+export function AuthForm({
+	onAuth,
+}: {
+	onAuth: (token: string, email: string) => void;
+}) {
+	const [mode, setMode] = useState<"login" | "register">("login");
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
+	const [error, setError] = useState<string | null>(null);
+	const [loading, setLoading] = useState(false);
+
+	async function handleSubmit(event: React.FormEvent) {
+		event.preventDefault();
+		setError(null);
+		setLoading(true);
+		try {
+			const endpoint =
+				mode === "login" ? "/api/auth/login" : "/api/auth/register";
+			const response = await fetch(endpoint, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email, password }),
+			});
+			const body = (await response.json()) as {
+				token?: string;
+				email?: string;
+				error?: string;
+			};
+			if (!response.ok || !body.token) {
+				setError(body.error ?? "Authentication failed");
+				return;
+			}
+			onAuth(body.token, body.email ?? email);
+		} catch {
+			setError("Network error. Please try again.");
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	return (
+		<main className="app-shell auth-page">
+			<header className="topbar">
+				<div className="brand">
+					<Code2 size={28} aria-hidden="true" />
+					<span>Better GitHub</span>
+				</div>
+			</header>
+			<div className="auth-container">
+				<div className="auth-card">
+					<Code2 size={48} aria-hidden="true" className="auth-logo" />
+					<h1 className="auth-title">Sign in to Better GitHub</h1>
+					<form
+						className="auth-form"
+						onSubmit={handleSubmit}
+						data-testid="auth-form"
+					>
+						<label className="auth-label">
+							Email address
+							<input
+								className="auth-input"
+								type="email"
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+								required
+								autoComplete="email"
+								data-testid="auth-email"
+							/>
+						</label>
+						<label className="auth-label">
+							Password
+							<input
+								className="auth-input"
+								type="password"
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								required
+								autoComplete={
+									mode === "login" ? "current-password" : "new-password"
+								}
+								data-testid="auth-password"
+							/>
+						</label>
+						{error && (
+							<p className="auth-error" role="alert" data-testid="auth-error">
+								{error}
+							</p>
+						)}
+						<button
+							className="auth-submit"
+							type="submit"
+							disabled={loading}
+							data-testid="auth-submit"
+						>
+							{loading
+								? "Please wait…"
+								: mode === "login"
+									? "Sign in"
+									: "Create account"}
+						</button>
+					</form>
+					<p className="auth-switch">
+						{mode === "login" ? (
+							<>
+								New to Better GitHub?{" "}
+								<button
+									type="button"
+									onClick={() => {
+										setMode("register");
+										setError(null);
+									}}
+								>
+									Create an account
+								</button>
+							</>
+						) : (
+							<>
+								Already have an account?{" "}
+								<button
+									type="button"
+									onClick={() => {
+										setMode("login");
+										setError(null);
+									}}
+								>
+									Sign in
+								</button>
+							</>
+						)}
+					</p>
+				</div>
+			</div>
+		</main>
+	);
+}
 
 const relativeTime = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
@@ -103,7 +255,13 @@ export function LineNumberedCode({ text }: { text: string }) {
 	);
 }
 
-function App() {
+function RepoBrowser({
+	auth,
+	onSignOut,
+}: {
+	auth: Extract<AuthState, { status: "authenticated" }>;
+	onSignOut: () => void;
+}) {
 	const [state, setState] = useState<LoadState>({ status: "loading" });
 	const [path, setPath] = useState(() =>
 		typeof window === "undefined"
@@ -136,8 +294,14 @@ function App() {
 		const url = `/api/repos/dexhorthy/better-github${params.size ? `?${params}` : ""}`;
 
 		setState({ status: "loading" });
-		fetch(url)
+		fetch(url, {
+			headers: { Authorization: `Bearer ${auth.token}` },
+		})
 			.then((response) => {
+				if (response.status === 401) {
+					onSignOut();
+					throw new Error("Session expired. Please sign in again.");
+				}
 				if (!response.ok) throw new Error("Repository could not be loaded");
 				return response.json() as Promise<RepositoryOverview>;
 			})
@@ -145,7 +309,7 @@ function App() {
 			.catch((error: Error) =>
 				setState({ status: "error", message: error.message }),
 			);
-	}, [path]);
+	}, [path, auth.token, onSignOut]);
 
 	const activePrs = useMemo(() => {
 		if (state.status !== "ready") return 0;
@@ -193,11 +357,19 @@ function App() {
 						aria-label="Search or jump to"
 					/>
 				</label>
-				<img
-					className="avatar"
-					src="https://avatars.githubusercontent.com/u/583231?v=4"
-					alt="Octocat profile"
-				/>
+				<div className="topbar-user">
+					<span className="topbar-email">{auth.email}</span>
+					<button
+						type="button"
+						className="signout-button"
+						onClick={onSignOut}
+						data-testid="signout-button"
+						title="Sign out"
+					>
+						<LogOut size={16} aria-hidden="true" />
+						Sign out
+					</button>
+				</div>
 			</header>
 
 			<section className="repo-header">
@@ -390,6 +562,32 @@ function App() {
 			</div>
 		</main>
 	);
+}
+
+function App() {
+	const [auth, setAuth] = useState<AuthState>(() => loadStoredAuth());
+
+	function handleAuth(token: string, email: string) {
+		if (typeof window !== "undefined") {
+			localStorage.setItem(AUTH_TOKEN_KEY, token);
+			localStorage.setItem(AUTH_EMAIL_KEY, email);
+		}
+		setAuth({ status: "authenticated", token, email });
+	}
+
+	function handleSignOut() {
+		if (typeof window !== "undefined") {
+			localStorage.removeItem(AUTH_TOKEN_KEY);
+			localStorage.removeItem(AUTH_EMAIL_KEY);
+		}
+		setAuth({ status: "unauthenticated" });
+	}
+
+	if (auth.status === "unauthenticated") {
+		return <AuthForm onAuth={handleAuth} />;
+	}
+
+	return <RepoBrowser auth={auth} onSignOut={handleSignOut} />;
 }
 
 export default App;

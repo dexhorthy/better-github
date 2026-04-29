@@ -71,23 +71,34 @@
   - Fixed lint issues caught by Biome: removed non-null assertion in `main.tsx`, replaced `role="region"` with `<section>`, suppressed `noArrayIndexKey` for static file content.
   - All 26 unit tests and 4 e2e tests pass; biome check is clean.
 
+- Added email + password authentication with SQLite and HMAC-SHA256 JWTs:
+  - `src/auth.ts`: SQLite `users` table, `register`/`login` using `Bun.password.hash`/`verify`, manual JWT `sign`/`verify` via `crypto.subtle`.
+  - `POST /api/auth/register` and `POST /api/auth/login` routes added to `server.ts`.
+  - `requireAuth` Hono middleware guards `GET /api/repos/:owner/:repo` — returns 401 without a valid `Authorization: Bearer` token.
+  - `AuthForm` component with login/register toggle, error display, and JWT persisted to `localStorage`.
+  - `RepoBrowser` component handles the repo page when authenticated; sends `Authorization: Bearer` on every API fetch and signs out on 401.
+  - Sign out button in topbar clears localStorage and returns to the login form.
+  - New API tests: register/login return tokens, wrong password returns 401, duplicate email returns 400, unauthenticated repo request returns 401.
+  - All 31 unit tests pass; biome check is clean.
+  - Browser-verified: `/` shows login form; registering loads repo page with email + sign-out button; sign out returns to login; re-login works.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add authentication — implement sign-up and sign-in with email + password using a local SQLite store (`bun:sqlite`). Expose `/api/auth/register` (POST, email+password → JWT) and `/api/auth/login` (POST → JWT). Add a simple login/register form to the React UI; on success store the JWT in localStorage and send it as `Authorization: Bearer` on API calls. The repository page should require authentication (return 401 if no valid token).
-Automated Verification: new API tests assert register returns a token, login returns a token, and `/api/repos/...` without a token returns 401.
-Browser Verification: navigate to `/`, see login form; fill in email and password, submit, and confirm the repo page loads.
-
+Task: Replace password auth with magic-link email login via Resend. Remove password column from SQLite. On `POST /api/auth/request-link` (body: email), generate a short-lived one-time token, store it in SQLite with a 15-minute expiry, and email a link to the user via the Resend API (`RESEND_API_KEY` is already in `.env`). On `GET /api/auth/verify?token=` validate the token, delete it, and return a JWT. Update the UI: show only an email input + "Send magic link" button, then a "Check your email" confirmation; the `/api/auth/verify` endpoint can be called manually to complete login.
+Automated Verification: API tests assert `request-link` with a valid email returns 200 and a pending token row exists in SQLite; `verify` with a valid token returns a JWT; `verify` with an expired/invalid token returns 401.
+Browser Verification: enter email, see confirmation screen.
 
 ## Next Up
 
-- Add authentication, sign up with email, and current-user state.
+- update authentication to use only magic links via resend emails, no password storage
+- migrate from sqlite to postgres in local docker compose on 5434
 - support for private/public repos and multiple repositories
 
 ## Long Term Goals
 
 - Deploy to the cloud on cloudflare (api key can be used to create other api keys)
-- build a github actions clone on cloudflare workers matching the github actions yaml spec
+- build a github actions clone on freestyle sandboxes
 - Add a second remote for this repo, and move development to that origin, update PROMPT.md with 5-10 word note to push to both remotes
 - Add repository navigation for Actions (placeholder for now), and Settings.
 - Add file contents view after nested directory browsing exists.
