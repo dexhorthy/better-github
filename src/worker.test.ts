@@ -6,10 +6,13 @@ import {
 	getWorkflowRunD1,
 	insertWorkflowRunD1,
 	listWorkflowRunsD1,
+	resetBroadcaster,
 	resetWorkflowExecutor,
+	setBroadcaster,
 	setWorkflowExecutor,
 	app as workerApp,
 } from "./worker";
+import type { WorkflowRun } from "./workflows";
 
 type Row = Record<string, unknown>;
 
@@ -505,6 +508,97 @@ test("POST actions/runs executes workflow and persists success+logs+steps to D1"
 	} finally {
 		resetWorkflowExecutor();
 	}
+});
+
+test("workflow run lifecycle broadcasts queued, in_progress, and final status", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const rows: Row[] = [];
+	const db = makeFakeD1(rows);
+	const broadcasts: { id: string; status: string }[] = [];
+	setBroadcaster((run: WorkflowRun) => {
+		broadcasts.push({ id: run.id, status: run.status });
+	});
+	setWorkflowExecutor(async () => ({
+		success: true,
+		cancelled: false,
+		logs: "ok",
+		steps: [],
+	}));
+
+	try {
+		const res = await workerApp.fetch(
+			new Request(
+				"http://localhost/api/repos/dexhorthy/better-github/actions/runs",
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						branch: "main",
+						commitSha: "abc",
+						workflowContent:
+							"name: WS CI\non:\n  push:\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Test\n        run: bun test",
+					}),
+				},
+			),
+			{ DB: db, JWT_SECRET: jwtSecret },
+		);
+		expect(res.status).toBe(201);
+		const pending = _getLastRunPromise();
+		if (!pending) throw new Error("expected pending run promise");
+		await pending;
+
+		expect(broadcasts.map((b) => b.status)).toEqual([
+			"queued",
+			"in_progress",
+			"success",
+		]);
+		const ids = new Set(broadcasts.map((b) => b.id));
+		expect(ids.size).toBe(1);
+	} finally {
+		resetBroadcaster();
+		resetWorkflowExecutor();
+	}
+});
+
+test("GET /ws returns 400 without upgrade header", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(new Request("http://localhost/ws"), {
+		DB: db,
+		JWT_SECRET: "test-secret",
+	});
+	expect(res.status).toBe(400);
+});
+
+test("GET /ws forwards to WS_BROADCASTER Durable Object", async () => {
+	const db = makeFakeD1([]);
+	let forwarded = false;
+	const fakeStub = {
+		fetch: async (req: Request) => {
+			forwarded = true;
+			expect(req.headers.get("upgrade")).toBe("websocket");
+			return new Response("forwarded", { status: 200 });
+		},
+	};
+	const fakeNamespace = {
+		idFromName: (_name: string) => ({ toString: () => "id" }),
+		get: (_id: unknown) => fakeStub,
+	};
+	const res = await workerApp.fetch(
+		new Request("http://localhost/ws", {
+			headers: { upgrade: "websocket" },
+		}),
+		{
+			DB: db,
+			JWT_SECRET: "test-secret",
+			WS_BROADCASTER: fakeNamespace as unknown as never,
+		} as never,
+	);
+	expect(forwarded).toBe(true);
+	expect(res.status).toBe(200);
 });
 
 test("POST actions/runs/:runId/cancel cancels a queued run in D1", async () => {

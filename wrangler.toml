@@ -13,3 +13,11 @@ binding = "DB"
 database_name = "better-github-auth"
 database_id = "22233df0-3122-4361-8e09-d72621ee1c33"
 migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "WS_BROADCASTER"
+class_name = "WorkflowBroadcaster"
+
+[[migrations]]
+tag = "do_v1"
+new_sqlite_classes = ["WorkflowBroadcaster"]

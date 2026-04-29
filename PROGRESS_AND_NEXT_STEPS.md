@@ -327,12 +327,22 @@
   - Deployed Worker version `35846949-011b-42d5-81f8-8b4d2540309a` to `https://better-github.dexter-de6.workers.dev`.
   - All 101 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Surfaced real-time workflow run status updates on the deployed Worker via Cloudflare Durable Objects:
+  - Added `src/worker-broadcaster-do.ts` exporting a `WorkflowBroadcaster` Durable Object: accepts WS upgrades on `/ws` (`WebSocketPair` + `server.accept()`), tracks subscribe/unsubscribe per runId, and accepts `POST /broadcast` with a `WorkflowRun` body to fan messages out. Subscribed sockets get the full `{ type: "run_update", run }`; other sockets get a summary (no `logs`/`steps`).
+  - Wired `worker.ts` to forward `GET /ws` (with `Upgrade: websocket`) to the singleton DO instance (`idFromName("global")`).
+  - Added an injectable `Broadcaster` in `worker.ts` (default: POSTs the run to the DO via `WS_BROADCASTER` binding); the executor lifecycle now broadcasts on `queued`, `in_progress`, and final `success`/`failure`/`cancelled`. Cancellation of queued runs also broadcasts the cancelled state.
+  - `wrangler.toml` declares the `WS_BROADCASTER` binding and a `do_v1` migration with `new_sqlite_classes = ["WorkflowBroadcaster"]` (free-plan-compatible).
+  - Added Worker tests asserting `GET /ws` returns 400 without an upgrade header, forwards to the DO with the upgrade header, and that the run lifecycle broadcasts `queued → in_progress → success` for a single run id.
+  - Deployed Worker version `486ab6ce-23ef-45ec-9025-ddbbea5653ab`. Verified `wss://better-github.dexter-de6.workers.dev/ws` opens and closes cleanly via a Bun WebSocket client (`OPEN` / `CLOSE 1000`).
+  - Hardened the long-running `completed run includes logs and steps in detail response` test by giving it a 60s timeout (it was flaky at the default 5s when running against real Freestyle VMs).
+  - All 104 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Surface real-time workflow run status updates on the deployed Worker. The local Bun server already broadcasts `WorkflowRun` updates over `/ws` via `src/websocket.ts`, but `worker.ts` has no WebSocket handler, so the deployed Actions tab silently falls back to no live updates after `queued`. Wire a WebSocket route on the Worker (e.g. via Cloudflare Durable Objects or `WebSocketPair`) so the executor's status transitions push to subscribed clients the same way the Bun server does.
-Automated Verification: Add a Worker test that opens a fake WebSocket against the route, sends a subscribe message for a runId, and asserts the executor's status updates emit messages to the socket (mock the WS pair).
-Browser Verification: On deployed Worker, click "Run workflow" and watch the run detail flip from queued → in_progress → success/failure live without manual refresh.
+Task: Persist the WebSocket subscriber set across DO requests and replay the latest run state on subscribe. Currently `WorkflowBroadcaster` only forwards live broadcasts — a client that connects after the executor has already emitted `queued`/`in_progress` will silently miss those messages and only see the next state change. Maintain an in-DO `Map<runId, WorkflowRun>` (latest state) and, when a client sends `{ type: "subscribe", runId }`, immediately send them the cached `run_update` if one exists.
+Automated Verification: Add a Worker test that constructs the DO directly, calls `broadcast(run)` once with `status: "in_progress"`, then attaches a fake WebSocket and sends a `subscribe` message — assert the fake socket received a `run_update` for that runId.
+Browser Verification: On deployed Worker, click "Run workflow" and immediately open the run detail; the queued/in_progress badge should appear without waiting for the next state change.
 
 ## Next Up
 

@@ -10,6 +10,7 @@ you are working on cloning github
 7. optional - if you need user action like dns config or api keys created, add to ASKS_FOR_HUMAN.md
 8. this repo is public, never commit any sensitive keys or ids to this repo, always in .env
 9. theres an agentmail api key which you can use to test e2e auth workflows - create an inbox for yourself, etc, track in in progress file - this is only for your usage in building/testing, not for incorporating into the product
+10. if tests are failing, fix them. You are the only one working on this, so you are responsible for fixing them. Do not leave a mess for your future self.
 </guidance>
 
 <instructions>

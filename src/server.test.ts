@@ -574,7 +574,7 @@ jobs:
 
 		// Verify steps are present after completion (may be an empty array if workflow failed early)
 		expect(run.steps === undefined || Array.isArray(run.steps)).toBe(true);
-	});
+	}, 60_000);
 });
 
 describe("webhook api", () => {

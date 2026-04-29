@@ -6,3 +6,7 @@
 5. run the tests and linting and fix until they pass
 6. commit and push your changes
 </instructions>
+
+<guidance>
+if tests are failing, fix them. You are the only one working on this, so you are responsible for fixing them. Do not leave a mess for your future self.
+</guidance>
