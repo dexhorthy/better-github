@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-in-production";
 const ALGORITHM = "HS256";
+const TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 const db = new Database(process.env.AUTH_DB_PATH ?? "auth.db", {
 	create: true,
@@ -11,7 +12,16 @@ db.run(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS magic_link_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    expires_at INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )
 `);
@@ -54,7 +64,9 @@ async function sign(payload: Record<string, unknown>): Promise<string> {
 	return `${signingInput}.${base64url(new Uint8Array(sig))}`;
 }
 
-async function verify(token: string): Promise<Record<string, unknown> | null> {
+async function verifyJwt(
+	token: string,
+): Promise<Record<string, unknown> | null> {
 	const parts = token.split(".");
 	if (parts.length !== 3) return null;
 	const [header, body, signature] = parts;
@@ -82,54 +94,131 @@ async function verify(token: string): Promise<Record<string, unknown> | null> {
 	}
 }
 
-export type AuthResult =
+function generateToken(): string {
+	const bytes = new Uint8Array(32);
+	crypto.getRandomValues(bytes);
+	return base64url(bytes);
+}
+
+async function sendMagicLinkEmail(
+	email: string,
+	token: string,
+	baseUrl: string,
+): Promise<void> {
+	const apiKey = process.env.RESEND_API_KEY;
+	const domain = process.env.RESEND_API_DOMAN ?? "better-github.com";
+	if (!apiKey) throw new Error("RESEND_API_KEY not configured");
+
+	const link = `${baseUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
+
+	const res = await fetch("https://api.resend.com/emails", {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${apiKey}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			from: `Better GitHub <noreply@${domain}>`,
+			to: [email],
+			subject: "Your Better GitHub sign-in link",
+			html: `<p>Click the link below to sign in. It expires in 15 minutes.</p><p><a href="${link}">Sign in to Better GitHub</a></p><p>Or copy this link: ${link}</p>`,
+		}),
+	});
+
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(`Resend API error ${res.status}: ${text}`);
+	}
+}
+
+export type MagicLinkResult = { ok: true } | { ok: false; error: string };
+
+export async function requestMagicLink(
+	email: string,
+	baseUrl: string,
+): Promise<MagicLinkResult> {
+	if (!email) return { ok: false, error: "Email is required" };
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+		return { ok: false, error: "Invalid email address" };
+
+	// Upsert the user so they exist when the token is later verified
+	db.run("INSERT OR IGNORE INTO users (email) VALUES (?)", [email]);
+
+	// Delete any existing tokens for this email before issuing a new one
+	db.run("DELETE FROM magic_link_tokens WHERE email = ?", [email]);
+
+	const token = generateToken();
+	const expiresAt = Date.now() + TOKEN_TTL_MS;
+
+	db.run(
+		"INSERT INTO magic_link_tokens (email, token, expires_at) VALUES (?, ?, ?)",
+		[email, token, expiresAt],
+	);
+
+	try {
+		await sendMagicLinkEmail(email, token, baseUrl);
+	} catch (err) {
+		// Clean up the token if email delivery fails
+		db.run("DELETE FROM magic_link_tokens WHERE token = ?", [token]);
+		console.error("Magic link email failed:", err);
+		return { ok: false, error: "Failed to send magic link email" };
+	}
+
+	return { ok: true };
+}
+
+export type VerifyResult =
 	| { ok: true; token: string; email: string }
 	| { ok: false; error: string };
 
-export async function register(
-	email: string,
-	password: string,
-): Promise<AuthResult> {
-	if (!email || !password)
-		return { ok: false, error: "Email and password are required" };
-	if (password.length < 8)
-		return { ok: false, error: "Password must be at least 8 characters" };
+export async function verifyMagicLink(rawToken: string): Promise<VerifyResult> {
+	if (!rawToken) return { ok: false, error: "Token is required" };
 
-	const existing = db.query("SELECT id FROM users WHERE email = ?").get(email);
-	if (existing) return { ok: false, error: "Email already registered" };
+	const row = db
+		.query("SELECT email, expires_at FROM magic_link_tokens WHERE token = ?")
+		.get(rawToken) as { email: string; expires_at: number } | null;
 
-	const hash = await Bun.password.hash(password);
-	db.run("INSERT INTO users (email, password_hash) VALUES (?, ?)", [
-		email,
-		hash,
-	]);
-	const token = await sign({ email });
-	return { ok: true, token, email };
-}
+	if (!row) return { ok: false, error: "Invalid or expired token" };
 
-export async function login(
-	email: string,
-	password: string,
-): Promise<AuthResult> {
-	if (!email || !password)
-		return { ok: false, error: "Email and password are required" };
+	if (Date.now() > row.expires_at) {
+		db.run("DELETE FROM magic_link_tokens WHERE token = ?", [rawToken]);
+		return { ok: false, error: "Invalid or expired token" };
+	}
 
-	const user = db
-		.query("SELECT password_hash FROM users WHERE email = ?")
-		.get(email) as { password_hash: string } | null;
-	if (!user) return { ok: false, error: "Invalid email or password" };
+	// Consume the token
+	db.run("DELETE FROM magic_link_tokens WHERE token = ?", [rawToken]);
 
-	const valid = await Bun.password.verify(password, user.password_hash);
-	if (!valid) return { ok: false, error: "Invalid email or password" };
-
-	const token = await sign({ email });
-	return { ok: true, token, email };
+	const jwt = await sign({ email: row.email });
+	return { ok: true, token: jwt, email: row.email };
 }
 
 export async function verifyToken(
 	token: string,
 ): Promise<{ email: string } | null> {
-	const payload = await verify(token);
+	const payload = await verifyJwt(token);
 	if (!payload || typeof payload.email !== "string") return null;
 	return { email: payload.email };
+}
+
+// Exported for testing only — lets tests insert a token row directly
+export function _insertTestToken(
+	email: string,
+	token: string,
+	expiresAt: number,
+): void {
+	db.run("INSERT OR IGNORE INTO users (email) VALUES (?)", [email]);
+	db.run(
+		"INSERT INTO magic_link_tokens (email, token, expires_at) VALUES (?, ?, ?)",
+		[email, token, expiresAt],
+	);
+}
+
+// Exported for testing only — checks whether a pending token row exists
+export function _hasPendingToken(email: string): boolean {
+	const row = db
+		.query(
+			"SELECT id FROM magic_link_tokens WHERE email = ? AND expires_at > ?",
+		)
+		.get(email, Date.now());
+	return row !== null;
 }

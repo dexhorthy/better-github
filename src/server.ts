@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
-import { login, register, verifyToken } from "./auth";
+import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth";
 import {
 	branches,
 	commits,
@@ -45,22 +45,17 @@ function buildRepositoryOverview(
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
-app.post("/api/auth/register", async (c) => {
-	const body = (await c.req.json().catch(() => ({}))) as {
-		email?: string;
-		password?: string;
-	};
-	const result = await register(body.email ?? "", body.password ?? "");
+app.post("/api/auth/request-link", async (c) => {
+	const body = (await c.req.json().catch(() => ({}))) as { email?: string };
+	const baseUrl = new URL(c.req.url).origin;
+	const result = await requestMagicLink(body.email ?? "", baseUrl);
 	if (!result.ok) return c.json({ error: result.error }, 400);
-	return c.json({ token: result.token, email: result.email });
+	return c.json({ ok: true });
 });
 
-app.post("/api/auth/login", async (c) => {
-	const body = (await c.req.json().catch(() => ({}))) as {
-		email?: string;
-		password?: string;
-	};
-	const result = await login(body.email ?? "", body.password ?? "");
+app.get("/api/auth/verify", async (c) => {
+	const token = c.req.query("token") ?? "";
+	const result = await verifyMagicLink(token);
 	if (!result.ok) return c.json({ error: result.error }, 401);
 	return c.json({ token: result.token, email: result.email });
 });

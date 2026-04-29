@@ -46,34 +46,47 @@ export function AuthForm({
 }: {
 	onAuth: (token: string, email: string) => void;
 }) {
-	const [mode, setMode] = useState<"login" | "register">("login");
 	const [email, setEmail] = useState("");
-	const [password, setPassword] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const [sent, setSent] = useState(false);
+
+	// If the URL has ?token=... auto-verify on mount
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const token = params.get("token");
+		if (!token) return;
+		// Clear the token from the URL immediately
+		window.history.replaceState({}, "", window.location.pathname);
+		fetch(`/api/auth/verify?token=${encodeURIComponent(token)}`)
+			.then((r) => r.json())
+			.then((body) => {
+				const b = body as { token?: string; email?: string; error?: string };
+				if (b.token && b.email) {
+					onAuth(b.token, b.email);
+				} else {
+					setError(b.error ?? "Magic link verification failed");
+				}
+			})
+			.catch(() => setError("Network error verifying magic link"));
+	}, [onAuth]);
 
 	async function handleSubmit(event: React.FormEvent) {
 		event.preventDefault();
 		setError(null);
 		setLoading(true);
 		try {
-			const endpoint =
-				mode === "login" ? "/api/auth/login" : "/api/auth/register";
-			const response = await fetch(endpoint, {
+			const response = await fetch("/api/auth/request-link", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email, password }),
+				body: JSON.stringify({ email }),
 			});
-			const body = (await response.json()) as {
-				token?: string;
-				email?: string;
-				error?: string;
-			};
-			if (!response.ok || !body.token) {
-				setError(body.error ?? "Authentication failed");
+			const body = (await response.json()) as { ok?: boolean; error?: string };
+			if (!response.ok || !body.ok) {
+				setError(body.error ?? "Failed to send magic link");
 				return;
 			}
-			onAuth(body.token, body.email ?? email);
+			setSent(true);
 		} catch {
 			setError("Network error. Please try again.");
 		} finally {
@@ -93,84 +106,51 @@ export function AuthForm({
 				<div className="auth-card">
 					<Code2 size={48} aria-hidden="true" className="auth-logo" />
 					<h1 className="auth-title">Sign in to Better GitHub</h1>
-					<form
-						className="auth-form"
-						onSubmit={handleSubmit}
-						data-testid="auth-form"
-					>
-						<label className="auth-label">
-							Email address
-							<input
-								className="auth-input"
-								type="email"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								required
-								autoComplete="email"
-								data-testid="auth-email"
-							/>
-						</label>
-						<label className="auth-label">
-							Password
-							<input
-								className="auth-input"
-								type="password"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								required
-								autoComplete={
-									mode === "login" ? "current-password" : "new-password"
-								}
-								data-testid="auth-password"
-							/>
-						</label>
-						{error && (
-							<p className="auth-error" role="alert" data-testid="auth-error">
-								{error}
-							</p>
-						)}
-						<button
-							className="auth-submit"
-							type="submit"
-							disabled={loading}
-							data-testid="auth-submit"
+					{sent ? (
+						<div className="auth-sent" data-testid="auth-sent">
+							<p>Check your email — we sent a sign-in link to <strong>{email}</strong>.</p>
+							<p className="auth-hint">The link expires in 15 minutes.</p>
+							<button
+								type="button"
+								className="auth-resend"
+								onClick={() => setSent(false)}
+							>
+								Use a different email
+							</button>
+						</div>
+					) : (
+						<form
+							className="auth-form"
+							onSubmit={handleSubmit}
+							data-testid="auth-form"
 						>
-							{loading
-								? "Please wait…"
-								: mode === "login"
-									? "Sign in"
-									: "Create account"}
-						</button>
-					</form>
-					<p className="auth-switch">
-						{mode === "login" ? (
-							<>
-								New to Better GitHub?{" "}
-								<button
-									type="button"
-									onClick={() => {
-										setMode("register");
-										setError(null);
-									}}
-								>
-									Create an account
-								</button>
-							</>
-						) : (
-							<>
-								Already have an account?{" "}
-								<button
-									type="button"
-									onClick={() => {
-										setMode("login");
-										setError(null);
-									}}
-								>
-									Sign in
-								</button>
-							</>
-						)}
-					</p>
+							<label className="auth-label">
+								Email address
+								<input
+									className="auth-input"
+									type="email"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+									required
+									autoComplete="email"
+									data-testid="auth-email"
+								/>
+							</label>
+							{error && (
+								<p className="auth-error" role="alert" data-testid="auth-error">
+									{error}
+								</p>
+							)}
+							<button
+								className="auth-submit"
+								type="submit"
+								disabled={loading}
+								data-testid="auth-submit"
+							>
+								{loading ? "Sending…" : "Send magic link"}
+							</button>
+						</form>
+					)}
 				</div>
 			</div>
 		</main>

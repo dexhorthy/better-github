@@ -82,16 +82,24 @@
   - All 31 unit tests pass; biome check is clean.
   - Browser-verified: `/` shows login form; registering loads repo page with email + sign-out button; sign out returns to login; re-login works.
 
+- Replaced password auth with magic-link email login via Resend:
+  - `src/auth.ts`: removed `password_hash` column from `users` table; added `magic_link_tokens` table (email, token, expires_at); `requestMagicLink` upserts user, issues a random 32-byte base64url token stored with 15-min expiry, emails via Resend API; `verifyMagicLink` validates and consumes the token, returning a JWT.
+  - `POST /api/auth/request-link` (body: email) — emails a sign-in link, returns `{ ok: true }`.
+  - `GET /api/auth/verify?token=` — consumes the token and returns `{ token, email }`.
+  - `AuthForm` now shows only an email input + "Send magic link" button; auto-verifies if `?token=` is present in the URL on mount; confirmation screen shows "Check your email — we sent a sign-in link to <email>."
+  - Test helpers `_insertTestToken` / `_hasPendingToken` allow API tests to bypass real email delivery.
+  - API tests: missing/invalid email → 400; valid token → 200 JWT; expired token → 401; unknown token → 401; token consumed on first use.
+  - Browser-verified: email form shows no password field; submitting shows confirmation screen.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Replace password auth with magic-link email login via Resend. Remove password column from SQLite. On `POST /api/auth/request-link` (body: email), generate a short-lived one-time token, store it in SQLite with a 15-minute expiry, and email a link to the user via the Resend API (`RESEND_API_KEY` is already in `.env`). On `GET /api/auth/verify?token=` validate the token, delete it, and return a JWT. Update the UI: show only an email input + "Send magic link" button, then a "Check your email" confirmation; the `/api/auth/verify` endpoint can be called manually to complete login.
-Automated Verification: API tests assert `request-link` with a valid email returns 200 and a pending token row exists in SQLite; `verify` with a valid token returns a JWT; `verify` with an expired/invalid token returns 401.
-Browser Verification: enter email, see confirmation screen.
+Task: Migrate from SQLite to Postgres in a local Docker Compose on port 5434. Replace `bun:sqlite` with `Bun.sql` (the built-in Bun Postgres client). Add a `docker-compose.yml` at the repo root that starts `postgres:16` on port 5434. Update `src/auth.ts` to use `Bun.sql` with the same schema (users, magic_link_tokens). Keep `AUTH_DB_PATH` unused but add `DATABASE_URL` env var (default: `postgres://postgres:postgres@localhost:5434/better_github`). Migrate existing test helpers to Postgres.
+Automated Verification: API tests for auth and repo continue to pass with Postgres running.
+Browser Verification: register email, see confirmation screen (same as before).
 
 ## Next Up
 
-- update authentication to use only magic links via resend emails, no password storage
 - migrate from sqlite to postgres in local docker compose on 5434
 - support for private/public repos and multiple repositories
 
@@ -100,6 +108,8 @@ Browser Verification: enter email, see confirmation screen.
 - Deploy to the cloud on cloudflare (api key can be used to create other api keys)
 - build a github actions clone on freestyle sandboxes
 - Add a second remote for this repo, and move development to that origin, update PROMPT.md with 5-10 word note to push to both remotes
+- add .better-github/workflows/ci.yml to run tests on push/merge to main
+- add .better-github/workflows/deploy.yml to deploy cloudflare stack on push/merge to main
 - Add repository navigation for Actions (placeholder for now), and Settings.
 - Add file contents view after nested directory browsing exists.
 
