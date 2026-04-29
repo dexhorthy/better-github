@@ -18,8 +18,10 @@ import { buildRepositoryOverview } from "./repository-overview";
 import { verifyWebhookSignature } from "./webhook-signature";
 import { makeD1WorkflowRunRepo } from "./workflow-db-d1";
 import {
+	DEFAULT_WORKFLOW_CONTENT,
 	deriveTerminalStatus,
 	executeWorkflowRun,
+	newQueuedRun,
 	parseWorkflow,
 	requestCancellation,
 	shouldTrigger,
@@ -216,34 +218,28 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 		commitSha = originalRun.commitSha;
 	}
 
-	const workflowContent =
-		body.workflowContent ??
-		`name: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Checkout\n        uses: checkout\n      - name: Install\n        run: bun install\n      - name: Test\n        run: bun test`;
-
-	const workflow = parseWorkflow(workflowContent);
+	const workflow = parseWorkflow(
+		body.workflowContent ?? DEFAULT_WORKFLOW_CONTENT,
+	);
 	if (!workflow) {
 		return c.json({ error: "Invalid workflow YAML" }, 400);
 	}
 
-	const runId = crypto.randomUUID();
-	const run: WorkflowRun = {
-		id: runId,
+	const run = newQueuedRun({
 		workflowName: workflow.name,
 		repoOwner: owner,
 		repoName: repo,
 		branch,
 		commitSha,
-		status: "queued",
-		startedAt: new Date().toISOString(),
-	};
+	});
 
 	await runRepo.insert(run);
 	await broadcaster(run, c.env);
 
 	bridgeFreestyleEnv(c.env);
-	startWorkflowExecution(c.env, runId, workflow, branch, commitSha, c);
+	startWorkflowExecution(c.env, run.id, workflow, branch, commitSha, c);
 
-	return c.json({ id: runId, status: "queued" }, 201);
+	return c.json({ id: run.id, status: "queued" }, 201);
 });
 
 function startWorkflowExecution(
@@ -354,21 +350,17 @@ app.post("/api/webhooks/push", async (c) => {
 		if (!workflow) continue;
 		if (!shouldTrigger(workflow, "push", branch)) continue;
 
-		const runId = crypto.randomUUID();
-		const run: WorkflowRun = {
-			id: runId,
+		const run = newQueuedRun({
 			workflowName: workflow.name,
 			repoOwner: owner,
 			repoName: repo,
 			branch,
 			commitSha,
-			status: "queued",
-			startedAt: new Date().toISOString(),
-		};
+		});
 		await runRepo.insert(run);
 		await broadcaster(run, c.env);
-		triggered.push({ id: runId, workflowName: workflow.name });
-		startWorkflowExecution(c.env, runId, workflow, branch, commitSha, c);
+		triggered.push({ id: run.id, workflowName: workflow.name });
+		startWorkflowExecution(c.env, run.id, workflow, branch, commitSha, c);
 	}
 
 	return c.json({ message: "Push event processed", triggered });

@@ -19,8 +19,10 @@ import {
 } from "./websocket";
 import { postgresWorkflowRunRepo as runRepo } from "./workflow-db";
 import {
+	DEFAULT_WORKFLOW_CONTENT,
 	deriveTerminalStatus,
 	executeWorkflowRun,
+	newQueuedRun,
 	parseWorkflow,
 	requestCancellation,
 	shouldTrigger,
@@ -138,21 +140,17 @@ app.post("/api/webhooks/push", async (c) => {
 
 		if (!shouldTrigger(workflow, "push", branch)) continue;
 
-		const runId = crypto.randomUUID();
-		const run: WorkflowRun = {
-			id: runId,
+		const run = newQueuedRun({
 			workflowName: workflow.name,
 			repoOwner: owner,
 			repoName: repo,
 			branch,
 			commitSha,
-			status: "queued",
-			startedAt: new Date().toISOString(),
-		};
+		});
 
 		await runRepo.insert(run);
-		triggered.push({ id: runId, workflowName: workflow.name });
-		startWorkflowExecution(runId, workflow, branch, commitSha);
+		triggered.push({ id: run.id, workflowName: workflow.name });
+		startWorkflowExecution(run.id, workflow, branch, commitSha);
 	}
 
 	return c.json({ message: "Push event processed", triggered });
@@ -187,7 +185,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 
 	let branch = body.branch ?? "main";
 	let commitSha = body.commitSha ?? "manual";
-	let workflowContent = body.workflowContent;
+	const workflowContent = body.workflowContent;
 
 	if (body.rerunOf) {
 		const originalRun = await runRepo.get(body.rerunOf);
@@ -198,31 +196,23 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 		commitSha = originalRun.commitSha;
 	}
 
-	if (!workflowContent) {
-		workflowContent = `name: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Checkout\n        uses: checkout\n      - name: Install\n        run: bun install\n      - name: Test\n        run: bun test`;
-	}
-
-	const workflow = parseWorkflow(workflowContent);
+	const workflow = parseWorkflow(workflowContent ?? DEFAULT_WORKFLOW_CONTENT);
 	if (!workflow) {
 		return c.json({ error: "Invalid workflow YAML" }, 400);
 	}
 
-	const runId = crypto.randomUUID();
-	const run: WorkflowRun = {
-		id: runId,
+	const run = newQueuedRun({
 		workflowName: workflow.name,
 		repoOwner: owner,
 		repoName: repo,
 		branch,
 		commitSha,
-		status: "queued",
-		startedAt: new Date().toISOString(),
-	};
+	});
 
 	await runRepo.insert(run);
-	startWorkflowExecution(runId, workflow, branch, commitSha);
+	startWorkflowExecution(run.id, workflow, branch, commitSha);
 
-	return c.json({ id: runId, status: "queued" }, 201);
+	return c.json({ id: run.id, status: "queued" }, 201);
 });
 
 app.post(

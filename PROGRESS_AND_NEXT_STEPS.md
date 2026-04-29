@@ -385,6 +385,12 @@
   - Net deletion: ~45 lines of duplicated row-mapping logic. Single source of truth for translating a `workflow_runs` row into a `WorkflowRun` regardless of runtime.
   - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Consolidated queued `WorkflowRun` construction and the default workflow YAML literal into `src/workflows.ts`:
+  - Added `newQueuedRun({ workflowName, repoOwner, repoName, branch, commitSha })` that returns a `WorkflowRun` with a fresh UUID, `status: "queued"`, and ISO `startedAt`. Replaces 4 identical inline `crypto.randomUUID()` + object-literal blocks across `src/server.ts` (POST `/actions/runs`, POST `/webhooks/push`) and `src/worker.ts` (same two routes).
+  - Added `DEFAULT_WORKFLOW_CONTENT` constant — the default `name: CI / runs-on: freestyle-vm / bun install / bun test` template that was duplicated character-for-character in `server.ts:202` and `worker.ts:221`.
+  - Net deletion: ~36 lines across `server.ts` (-13) and `worker.ts` (-23). Both runtimes now go through one constructor and one constant.
+  - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 - Extracted shared workflow run lifecycle helpers in `src/workflows.ts`:
   - Added exported `WorkflowRunResult` type and `deriveTerminalStatus(result)` returning `{ status, conclusion }` (collapses the cancelled/success/failure ternary that was duplicated three times across `server.ts` and `worker.ts`).
   - `server.ts` gained a `startWorkflowExecution(runId, workflow, branch, commitSha)` helper mirroring `worker.ts`; the `POST /api/repos/:owner/:repo/actions/runs` and `POST /api/webhooks/push` handlers now both call into it instead of duplicating the in-progress → execute → terminal-status update pattern.

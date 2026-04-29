@@ -95,6 +95,40 @@ export function parseWorkflow(content: string): Workflow | null {
 	}
 }
 
+export const DEFAULT_WORKFLOW_CONTENT = `name: CI
+on:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: freestyle-vm
+    steps:
+      - name: Checkout
+        uses: checkout
+      - name: Install
+        run: bun install
+      - name: Test
+        run: bun test`;
+
+export function newQueuedRun(opts: {
+	workflowName: string;
+	repoOwner: string;
+	repoName: string;
+	branch: string;
+	commitSha: string;
+}): WorkflowRun {
+	return {
+		id: crypto.randomUUID(),
+		workflowName: opts.workflowName,
+		repoOwner: opts.repoOwner,
+		repoName: opts.repoName,
+		branch: opts.branch,
+		commitSha: opts.commitSha,
+		status: "queued",
+		startedAt: new Date().toISOString(),
+	};
+}
+
 export function shouldTrigger(
 	workflow: Workflow,
 	event: "push" | "pull_request",

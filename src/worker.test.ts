@@ -10,12 +10,12 @@ import {
 	setWorkflowExecutor,
 	app as workerApp,
 } from "./worker";
+import { WorkflowBroadcaster } from "./worker-broadcaster-do";
 import {
 	getWorkflowRunD1,
 	insertWorkflowRunD1,
 	listWorkflowRunsD1,
 } from "./workflow-db-d1";
-import { WorkflowBroadcaster } from "./worker-broadcaster-do";
 import type { WorkflowRun } from "./workflows";
 
 type Row = Record<string, unknown>;
