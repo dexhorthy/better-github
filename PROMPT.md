@@ -9,6 +9,7 @@ you are working on cloning github
 6. push changes to both origin and upstream remotes
 7. optional - if you need user action like dns config or api keys created, add to ASKS_FOR_HUMAN.md
 8. this repo is public, never commit any sensitive keys or ids to this repo, always in .env
+9. theres an agentmail api key which you can use to test e2e auth workflows - create an inbox for yourself, etc, track in in progress file
 </guidance>
 
 <instructions>

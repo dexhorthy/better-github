@@ -1,0 +1,1 @@
+- 2026-04-29-10:44:00 AM PT - added credits and pro plan to freestyle dashboard
