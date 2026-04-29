@@ -33,6 +33,7 @@ import type {
 	WorkflowRun,
 	WorkflowStepResult,
 } from "./types";
+import { useWorkflowWebSocket } from "./useWorkflowWebSocket";
 import "./styles.css";
 
 type LoadState =
@@ -617,6 +618,24 @@ export function ActionsTab({
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 	const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
 
+	const handleRunUpdate = useCallback((updatedRun: WorkflowRun) => {
+		setState((prev) => {
+			if (prev.status !== "ready") return prev;
+			const existingIndex = prev.runs.findIndex((r) => r.id === updatedRun.id);
+			if (existingIndex >= 0) {
+				const newRuns = [...prev.runs];
+				newRuns[existingIndex] = updatedRun;
+				return { status: "ready", runs: newRuns };
+			}
+			return { status: "ready", runs: [updatedRun, ...prev.runs] };
+		});
+		if (selectedRunId === updatedRun.id) {
+			setSelectedRun(updatedRun);
+		}
+	}, [selectedRunId]);
+
+	useWorkflowWebSocket(handleRunUpdate, selectedRunId ?? undefined);
+
 	const fetchRuns = useCallback(() => {
 		fetch(
 			`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs`,
@@ -660,8 +679,6 @@ export function ActionsTab({
 
 	useEffect(() => {
 		fetchRuns();
-		const interval = setInterval(fetchRuns, 5000);
-		return () => clearInterval(interval);
 	}, [fetchRuns]);
 
 	useEffect(() => {
@@ -670,8 +687,6 @@ export function ActionsTab({
 			return;
 		}
 		fetchRunDetail(selectedRunId);
-		const interval = setInterval(() => fetchRunDetail(selectedRunId), 5000);
-		return () => clearInterval(interval);
 	}, [selectedRunId, fetchRunDetail]);
 
 	const triggerRun = async () => {

@@ -193,15 +193,27 @@
   - Added unit tests for `RunDetail` component rendering steps and back button.
   - All 52 unit tests pass; biome lint is clean.
 
+- Added real-time workflow run status updates via WebSocket:
+  - Created `src/websocket.ts` with WebSocket handlers for subscribe/unsubscribe to specific runs.
+  - `broadcastRunUpdate(run)` sends full run details to subscribed clients, summary to others.
+  - Wired WebSocket handlers to `Bun.serve()` at `/ws` endpoint in `server.ts`.
+  - Created `src/useWorkflowWebSocket.ts` React hook for WebSocket connection with auto-reconnect.
+  - Updated `ActionsTab` to use WebSocket for real-time updates instead of polling.
+  - When a run is selected, client subscribes to that run ID for detailed step updates.
+  - Removed 5-second polling interval in favor of push-based WebSocket updates.
+  - Added unit tests for WebSocket handlers: open/close, subscribe/unsubscribe, broadcast behavior.
+  - Browser-verified: triggering a workflow run shows instant status transitions (queued → in_progress → success/failure) without manual refresh.
+  - All 59 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add real-time workflow run status updates via WebSocket for instant feedback.
-Automated Verification: Unit test for WebSocket connection handler; API test for WebSocket endpoint.
-Browser Verification: Starting a workflow run shows status updates without manual refresh.
+Task: Add workflow run cancellation button to stop in-progress runs.
+Automated Verification: API test for POST `/api/repos/:owner/:repo/actions/runs/:runId/cancel` endpoint returning 200.
+Browser Verification: Clicking "Cancel" on an in-progress run stops execution and updates status to "cancelled".
 
 ## Next Up
-- Add workflow run cancellation button
+- Add workflow file editor in UI
 
 ## Long Term Goals
 

@@ -14,6 +14,12 @@ import { fetchFreestyleRepoData, fetchWorkflowFiles } from "./freestyle-git";
 import type { RepositoryOverview } from "./types";
 import { verifyWebhookSignature } from "./webhook-signature";
 import {
+	broadcastRunUpdate,
+	handleClose,
+	handleMessage,
+	handleOpen,
+} from "./websocket";
+import {
 	getWorkflowRun,
 	insertWorkflowRun,
 	listWorkflowRuns,
@@ -27,6 +33,17 @@ import {
 } from "./workflows";
 
 export const app = new Hono();
+
+async function updateAndBroadcastRun(
+	runId: string,
+	updates: Partial<WorkflowRun>,
+) {
+	await updateWorkflowRun(runId, updates);
+	const run = await getWorkflowRun(runId);
+	if (run) {
+		broadcastRunUpdate(run);
+	}
+}
 
 function buildRepositoryOverview(
 	fixture: (typeof repositories)[number],
@@ -143,7 +160,7 @@ app.post("/api/webhooks/push", async (c) => {
 
 		// Execute in background
 		(async () => {
-			await updateWorkflowRun(runId, { status: "in_progress" });
+			await updateAndBroadcastRun(runId, { status: "in_progress" });
 			const repoUrl = `https://git.freestyle.sh/${process.env.FREESTYLE_REPO_ID}`;
 			const result = await executeWorkflowRun(
 				workflow,
@@ -151,7 +168,7 @@ app.post("/api/webhooks/push", async (c) => {
 				branch,
 				commitSha,
 			);
-			await updateWorkflowRun(runId, {
+			await updateAndBroadcastRun(runId, {
 				status: result.success ? "success" : "failure",
 				conclusion: result.success ? "success" : "failure",
 				completedAt: new Date().toISOString(),
@@ -218,7 +235,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 
 	// Execute in background
 	(async () => {
-		await updateWorkflowRun(runId, { status: "in_progress" });
+		await updateAndBroadcastRun(runId, { status: "in_progress" });
 		const repoUrl = `https://git.freestyle.sh/${process.env.FREESTYLE_REPO_ID}`;
 		const result = await executeWorkflowRun(
 			workflow,
@@ -226,7 +243,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 			branch,
 			commitSha,
 		);
-		await updateWorkflowRun(runId, {
+		await updateAndBroadcastRun(runId, {
 			status: result.success ? "success" : "failure",
 			conclusion: result.success ? "success" : "failure",
 			completedAt: new Date().toISOString(),
@@ -261,7 +278,22 @@ if (import.meta.main) {
 	const port = Number(process.env.PORT ?? 8787);
 	Bun.serve({
 		port,
-		fetch: app.fetch,
+		fetch(req, server) {
+			const url = new URL(req.url);
+			if (url.pathname === "/ws" && req.headers.get("upgrade") === "websocket") {
+				const upgraded = server.upgrade(req, {
+					data: { subscribedRunIds: new Set<string>() },
+				});
+				if (upgraded) return undefined;
+				return new Response("WebSocket upgrade failed", { status: 400 });
+			}
+			return app.fetch(req, server);
+		},
+		websocket: {
+			open: handleOpen,
+			message: handleMessage,
+			close: handleClose,
+		},
 	});
 	console.log(`Hono API listening on http://localhost:${port}`);
 }
