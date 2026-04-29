@@ -113,6 +113,31 @@ input {
 	font-weight: 600;
 }
 
+.repo-breadcrumb {
+	display: flex;
+	align-items: center;
+	padding: 10px clamp(18px, 4vw, 48px) 0;
+	font-size: 14px;
+	color: #59636e;
+}
+
+.repo-breadcrumb-home {
+	color: #0969da;
+	text-decoration: none;
+}
+
+.repo-breadcrumb-home:hover {
+	text-decoration: underline;
+}
+
+.repo-breadcrumb-sep {
+	color: #59636e;
+}
+
+.repo-breadcrumb-owner {
+	color: #59636e;
+}
+
 .repo-header p {
 	max-width: 760px;
 	margin: 10px 0 0;

@@ -112,12 +112,19 @@
   - Added API test asserting `GET /api/repos` returns 200 with ≥ 2 entries including both fixture repos.
   - Browser-verified: after login, repos list shows `dexhorthy/better-github` and `dexhorthy/hello-world`; clicking a repo navigates to `/:owner/:repo` with the code browser; pressing back returns to the list.
 
+- Added a `RepoBreadcrumb` component above the repo header in `RepoBrowser`:
+  - `RepoBreadcrumb` renders `Better GitHub / dexhorthy` with `Better GitHub` as a link that calls `onBack` to navigate to `/`.
+  - Modifier-key clicks (cmd/ctrl/shift/alt) pass through for open-in-new-tab behavior.
+  - CSS classes `repo-breadcrumb`, `repo-breadcrumb-home`, `repo-breadcrumb-sep`, `repo-breadcrumb-owner` added to `styles.css`.
+  - Unit tests: breadcrumb renders `href="/"` link with `data-testid="repo-breadcrumb-home"` and owner text; plain click calls `onBack` and prevents default; modifier-key click skips both.
+  - Browser-verified: clicking `dexhorthy/better-github` shows `Better GitHub / dexhorthy` breadcrumb above repo header; clicking `Better GitHub` returns to repos list SPA-style without a full reload.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add a "back to repositories" link in `RepoBrowser` so users can navigate from a repo back to the list without using the browser back button. Render a small breadcrumb above the repo header: `Better GitHub / dexhorthy` where `Better GitHub` navigates to `/`.
-Automated Verification: Unit test asserts the breadcrumb link renders and calls `onBack` on click.
-Browser Verification: While viewing a repo, click the breadcrumb link and confirm the repos list appears.
+Task: Deploy to the cloud on Cloudflare Workers (api key can be used to create other api keys). Use the Cloudflare Workers + Hono stack — move the Hono API from a local Bun server to a Cloudflare Worker, and serve the Vite-built frontend from Cloudflare Pages or as static assets alongside the Worker.
+Automated Verification: `bun run deploy` script succeeds; `curl https://<worker>.workers.dev/api/health` returns `{ok:true}`.
+Browser Verification: Open the deployed URL and verify the login flow, repos list, and repo browser all work as expected.
 
 ## Next Up
 

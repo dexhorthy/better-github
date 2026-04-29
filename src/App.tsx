@@ -197,6 +197,34 @@ export function buildPathSearch(path: string): string {
 	return trimmed ? `?path=${encodeURIComponent(trimmed)}` : "";
 }
 
+export function RepoBreadcrumb({
+	onBack,
+	owner,
+}: {
+	onBack: () => void;
+	owner: string;
+}) {
+	return (
+		<nav className="repo-breadcrumb" aria-label="Repository breadcrumb">
+			<a
+				className="repo-breadcrumb-home"
+				data-testid="repo-breadcrumb-home"
+				href="/"
+				onClick={(event) => {
+					if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+						return;
+					event.preventDefault();
+					onBack();
+				}}
+			>
+				Better GitHub
+			</a>
+			<span className="repo-breadcrumb-sep" aria-hidden="true"> / </span>
+			<span className="repo-breadcrumb-owner">{owner}</span>
+		</nav>
+	);
+}
+
 export function RepoHomeLink({
 	name,
 	onHome,
@@ -479,6 +507,8 @@ function RepoBrowser({
 					</button>
 				</div>
 			</header>
+
+			<RepoBreadcrumb onBack={onBack} owner={owner} />
 
 			<section className="repo-header">
 				<div>
