@@ -1,6 +1,7 @@
 import { $ } from "bun";
 import { freestyle } from "freestyle";
 import { findFreestyleRepoId } from "./freestyle-git";
+import { triggerPushWebhook } from "./trigger-webhook";
 
 const DEFAULT_BRANCH = "main";
 const DEFAULT_AUTHOR = {
@@ -91,4 +92,24 @@ if (import.meta.main) {
 	console.log(
 		`Freestyle repo ${action}: ${result.repoId}${commit} (${result.fileCount} files)`,
 	);
+
+	if (result.commitSha && process.env.WEBHOOK_TRIGGER !== "0") {
+		const owner = process.env.WEBHOOK_OWNER ?? "dexhorthy";
+		const branch = process.env.WEBHOOK_BRANCH ?? DEFAULT_BRANCH;
+		try {
+			const webhook = await triggerPushWebhook({
+				owner,
+				repo: repoName,
+				branch,
+				commitSha: result.commitSha,
+			});
+			console.log(
+				`Push webhook → ${webhook.status}${webhook.body ? `: ${webhook.body}` : ""}`,
+			);
+		} catch (err) {
+			console.warn(
+				`Push webhook failed: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+	}
 }

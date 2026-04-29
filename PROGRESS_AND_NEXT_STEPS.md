@@ -356,12 +356,14 @@
   - Live-verified end-to-end: `curl -X POST .../api/webhooks/push` with a valid HMAC signature and `commitSha=webhook-test-001` returned `200 {"triggered":[{CI},{Deploy}]}`, confirming both `.better-github/workflows/ci.yml` and `deploy.yml` matched the push event and queued runs in remote D1.
   - All 110 unit tests pass; biome check and `tsc --noEmit` are clean.
 
-## Highest Priority Next Task
-<guidance>make this the smallest independently testable next step</guidance>
-
-Task: Wire a real push trigger into the seed flow so committing locally actually fires the deployed Worker's webhook. Today `bun run seed:freestyle` upserts files into Freestyle Git but never POSTs `/api/webhooks/push`, so the new webhook only runs when curled by hand. Extend the seed script (or add a small `bun run trigger:webhook` helper) that, after a successful Freestyle push, computes the HMAC signature with `WEBHOOK_SECRET` and POSTs `{owner, repo, branch, commitSha}` to `https://better-github.dexter-de6.workers.dev/api/webhooks/push` (URL configurable via env). Add a `WEBHOOK_SECRET` entry to `.env.example` / TUTORIAL.md and set the secret on the deployed Worker via `wrangler secret put` so the production webhook isn't relying on the dev default.
-Automated Verification: Add a unit test for the new helper that, given a fake `fetch`, verifies it computes the correct `X-Hub-Signature-256` and posts the `{owner, repo, branch, commitSha}` body.
-Browser Verification: Run `bun run seed:freestyle better-github`, then refresh the Actions tab on the deployed app and confirm a new `Deploy` run appears at the top of the list within a few seconds without any manual `curl`.
+- Wired the deployed Worker's push webhook into the local seed flow:
+  - Added `src/trigger-webhook.ts` exposing `triggerPushWebhook({owner, repo, branch, commitSha, url?, secret?, fetchFn?})`. Computes `X-Hub-Signature-256` via `computeWebhookSignature` and POSTs `{owner, repo, branch, commitSha}` JSON. Defaults `url` to `https://better-github.dexter-de6.workers.dev/api/webhooks/push` (overridable via `WEBHOOK_URL`); secret comes from `WEBHOOK_SECRET` env.
+  - `src/seed-freestyle-repo.ts` now calls `triggerPushWebhook` after a successful Freestyle commit (using the returned `commitSha` and `DEFAULT_BRANCH=main`); skip with `WEBHOOK_TRIGGER=0`, override owner/branch via `WEBHOOK_OWNER`/`WEBHOOK_BRANCH`. Errors are warned, not thrown.
+  - Added `src/trigger-webhook.test.ts` with a fake `fetch` asserting the helper sends method `POST`, JSON content-type, the exact `{owner, repo, branch, commitSha}` body, and an `X-Hub-Signature-256` header that matches `computeWebhookSignature(body, secret)`. Second test asserts non-2xx responses surface their status/body.
+  - Added `WEBHOOK_SECRET` to local `.env` and ran `wrangler secret put WEBHOOK_SECRET` so the deployed Worker uses the same value (no longer falling back to the dev default).
+  - Updated `TUTORIAL.md` to document the auto-trigger behavior, `WEBHOOK_URL` / `WEBHOOK_TRIGGER=0` overrides, and `wrangler secret put` rotation.
+  - End-to-end verified: `bun run seed:freestyle better-github` pushed commit `f085cfa` (66 files) and `Push webhook → 200` returned `triggered: [{CI}, {Deploy}]` from the deployed Worker, confirming both `.better-github/workflows/ci.yml` and `deploy.yml` queued runs in remote D1 without any manual curl.
+  - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
 
 ## Next Up
 

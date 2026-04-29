@@ -111,6 +111,8 @@ curl -X POST http://localhost:8787/api/webhooks/push \
 ```
 Returns the list of triggered workflow runs. Missing/bad signature → 401.
 
+`bun run seed:freestyle` automatically POSTs to the webhook after a successful Freestyle commit using `WEBHOOK_SECRET`. Override the target with `WEBHOOK_URL=...` (defaults to the deployed Worker), or set `WEBHOOK_TRIGGER=0` to skip. The deployed Worker also has `WEBHOOK_SECRET` set via `wrangler secret put WEBHOOK_SECRET`; rotate locally and on the Worker together.
+
 ### WebSocket live updates
 ```js
 const ws = new WebSocket("ws://localhost:8787/ws");
