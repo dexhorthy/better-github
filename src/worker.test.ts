@@ -351,6 +351,38 @@ test("POST workflows returns 400 when content missing", async () => {
 	expect(res.status).toBe(400);
 });
 
+test("POST workflows returns 500 with 'Repository not found' when Freestyle creds missing", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const db = makeFakeD1([]);
+	const prevKey = process.env.FREESTYLE_API_KEY;
+	const prevRepoId = process.env.FREESTYLE_REPO_ID;
+	delete process.env.FREESTYLE_API_KEY;
+	delete process.env.FREESTYLE_REPO_ID;
+	try {
+		const res = await workerApp.fetch(
+			new Request(
+				"http://localhost/api/repos/dexhorthy/better-github/workflows",
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ name: "ci", content: "name: CI\non: push" }),
+				},
+			),
+			{ DB: db, JWT_SECRET: jwtSecret },
+		);
+		expect(res.status).toBe(500);
+		const body = (await res.json()) as { error: string };
+		expect(body.error).toBe("Repository not found");
+	} finally {
+		if (prevKey !== undefined) process.env.FREESTYLE_API_KEY = prevKey;
+		if (prevRepoId !== undefined) process.env.FREESTYLE_REPO_ID = prevRepoId;
+	}
+});
+
 test("PUT workflows/:name returns 401 without auth", async () => {
 	const db = makeFakeD1([]);
 	const res = await workerApp.fetch(

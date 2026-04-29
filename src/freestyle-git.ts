@@ -1,7 +1,18 @@
-import { freestyle } from "freestyle";
+import { Freestyle } from "freestyle";
 import type { FileContent, GitBranch, GitCommit, GitUser } from "./types";
 
 const FREESTYLE_API_BASE = "https://api.freestyle.sh";
+
+let _client: Freestyle | null = null;
+function getFreestyle(): Freestyle {
+	if (_client) return _client;
+	_client = new Freestyle({
+		apiKey: process.env.FREESTYLE_API_KEY,
+		fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
+			fetch(input, init)) as typeof fetch,
+	});
+	return _client;
+}
 
 type FreestyleRepoEntry = {
 	id: string;
@@ -86,20 +97,12 @@ export async function saveWorkflowFile(
 		const repoId = await findFreestyleRepoId(repoName);
 		if (!repoId) return { ok: false, error: "Repository not found" };
 
-		const repo = freestyle.git.repos.ref({ repoId });
+		const repo = getFreestyle().git.repos.ref({ repoId });
 		const path = `.better-github/workflows/${fileName}`;
 
-		const contents = repo.contents as typeof repo.contents & {
-			upsert(input: {
-				path: string;
-				content: string;
-				message: string;
-			}): Promise<unknown>;
-		};
-		await contents.upsert({
-			path,
-			content: Buffer.from(content).toString("base64"),
+		await repo.commits.create({
 			message: `Update ${fileName}`,
+			files: [{ path, content }],
 		});
 
 		return { ok: true };
@@ -119,15 +122,12 @@ export async function deleteWorkflowFile(
 		const repoId = await findFreestyleRepoId(repoName);
 		if (!repoId) return { ok: false, error: "Repository not found" };
 
-		const repo = freestyle.git.repos.ref({ repoId });
+		const repo = getFreestyle().git.repos.ref({ repoId });
 		const path = `.better-github/workflows/${fileName}`;
 
-		const contents = repo.contents as typeof repo.contents & {
-			delete(input: { path: string; message: string }): Promise<unknown>;
-		};
-		await contents.delete({
-			path,
+		await repo.commits.create({
 			message: `Delete ${fileName}`,
+			files: [{ path, deleted: true }],
 		});
 
 		return { ok: true };
@@ -146,7 +146,7 @@ export async function fetchWorkflowFiles(
 		const repoId = await findFreestyleRepoId(repoName);
 		if (!repoId) return [];
 
-		const repo = freestyle.git.repos.ref({ repoId });
+		const repo = getFreestyle().git.repos.ref({ repoId });
 		const workflowDir = await repo.contents.get({
 			path: ".better-github/workflows",
 		});
@@ -186,7 +186,7 @@ export async function fetchFreestyleRepoData(
 		const repoId = await findFreestyleRepoId(repoName);
 		if (!repoId) return null;
 
-		const repo = freestyle.git.repos.ref({ repoId });
+		const repo = getFreestyle().git.repos.ref({ repoId });
 
 		const [
 			defaultBranchResult,

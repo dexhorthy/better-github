@@ -310,12 +310,20 @@
   - Deployed Worker version `49d2066b-e091-498b-8df7-0d43e60ee77e`; verified live `POST/PUT/DELETE` against the deployed endpoints return `401` without an auth token.
   - All 99 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Wired the deployed Worker's workflow file CRUD end-to-end against Freestyle Git:
+  - Added a Worker test asserting `POST /workflows` with valid body but no Freestyle creds returns 500 `{ error: "Repository not found" }`.
+  - Discovered the `contents.upsert` / `contents.delete` calls in `freestyle-git.ts` were `as`-cast against methods that don't exist in the Freestyle SDK; replaced them with the documented `repo.commits.create({ files: [{ path, content }] })` / `{ path, deleted: true }` API.
+  - Discovered two CF-Workers-specific issues with the `freestyle` package: (a) the default lazy `freestyle` proxy triggers "Illegal invocation" on nested namespace calls, and (b) `ApiClient` stores `this.fetchFn = config.fetch || fetch` then calls it unbound, also "Illegal invocation". Switched to a singleton `new Freestyle({ apiKey, fetch: (input, init) => fetch(input, init) })` to fix both.
+  - Documented findings in `research_findings/freestyle-sdk-cloudflare-workers.md`.
+  - Deployed Worker version `d7b7f7ec-8a9a-4a92-bd25-db4f95e91f96`; verified live CRUD against `/api/repos/dexhorthy/better-github/workflows` with an AgentMail-issued JWT: list → POST `opus-test` → list (3 entries) → PUT (content updated) → DELETE → list (back to 2).
+  - All 100 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Wire the deployed Worker UI's "View workflows" editor end-to-end against the new write routes by setting `FREESTYLE_REPO_ID` (and verifying `FREESTYLE_API_KEY`) on the Worker, then exercising create → edit → delete from the deployed Actions tab.
-Automated Verification: Add a Worker test asserting `POST /workflows` with valid body but no Freestyle creds returns 500 with the expected error shape (`{ error: "Repository not found" }`), so we have coverage of the success/error split path now that auth+validation are covered.
-Browser Verification: On deployed Worker, open Actions → "View workflows", create a workflow, edit + save it, then delete it; confirm `GET /workflows` reflects each change after the round-trip.
+Task: Now that workflow file CRUD is live on the deployed Worker, run an actual workflow on a Freestyle VM from a `POST /api/repos/:owner/:repo/actions/runs` request and persist its terminal status (`success`/`failure`) + `logs` + `steps` back into D1 — i.e. wire the run executor into `worker.ts` instead of just inserting a `queued` row.
+Automated Verification: Add a Worker test that stubs the executor, calls `POST /actions/runs`, and asserts the row eventually flips from `queued` to `success` with non-empty `logs` and at least one step (using a fake D1 store).
+Browser Verification: On deployed Worker, click "Run workflow" in the Actions tab and watch the run move from queued → in_progress → success/failure with step logs visible in the run detail.
 
 ## Next Up
 
