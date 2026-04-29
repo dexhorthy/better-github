@@ -37,7 +37,8 @@ export type Route =
 
 export function parseRoute(pathname: string): Route {
 	const parts = pathname.split("/").filter(Boolean);
-	if (parts.length >= 2) return { page: "repo", owner: parts[0], repo: parts[1] };
+	if (parts.length >= 2)
+		return { page: "repo", owner: parts[0], repo: parts[1] };
 	return { page: "repos" };
 }
 
@@ -219,7 +220,10 @@ export function RepoBreadcrumb({
 			>
 				Better GitHub
 			</a>
-			<span className="repo-breadcrumb-sep" aria-hidden="true"> / </span>
+			<span className="repo-breadcrumb-sep" aria-hidden="true">
+				{" "}
+				/{" "}
+			</span>
 			<span className="repo-breadcrumb-owner">{owner}</span>
 		</nav>
 	);
@@ -330,7 +334,11 @@ export function RepoList({
 				{state.status === "ready" && (
 					<div className="repo-list" data-testid="repo-list">
 						{state.repos.map((r) => (
-							<article className="repo-list-item" key={r.id} data-testid="repo-list-item">
+							<article
+								className="repo-list-item"
+								key={r.id}
+								data-testid="repo-list-item"
+							>
 								<div className="repo-list-item-header">
 									<BookOpen size={16} aria-hidden="true" />
 									<a

@@ -8,17 +8,20 @@
 		"start": "bun run src/start.ts",
 		"seed:freestyle": "bun run src/seed-freestyle-repo.ts",
 		"build": "vite build",
+		"deploy": "bun run build && bunx wrangler deploy",
 		"typecheck": "tsc --noEmit",
 		"lint": "bunx @biomejs/biome check .",
 		"test": "bun test src/",
 		"test:e2e": "bun x --bun playwright test"
 	},
 	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20260429.1",
 		"@playwright/test": "^1.59.1",
 		"@types/bun": "latest",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3",
+		"wrangler": "^4.86.0"
 	},
 	"dependencies": {
 		"@vitejs/plugin-react": "^6.0.1",

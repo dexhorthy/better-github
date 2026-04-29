@@ -3,11 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
 	buildPathSearch,
 	LineNumberedCode,
+	parseRoute,
 	ReadmePreview,
 	RepoBreadcrumb,
 	RepoHomeLink,
 	readPathFromSearch,
-	parseRoute,
 } from "./App";
 
 describe("RepoBreadcrumb", () => {

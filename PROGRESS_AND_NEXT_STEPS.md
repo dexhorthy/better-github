@@ -119,20 +119,32 @@
   - Unit tests: breadcrumb renders `href="/"` link with `data-testid="repo-breadcrumb-home"` and owner text; plain click calls `onBack` and prevents default; modifier-key click skips both.
   - Browser-verified: clicking `dexhorthy/better-github` shows `Better GitHub / dexhorthy` breadcrumb above repo header; clicking `Better GitHub` returns to repos list SPA-style without a full reload.
 
+- Deployed to Cloudflare Workers at `https://better-github.dexter-de6.workers.dev`:
+  - Created `src/auth-core.ts` with a shared `AuthDB` interface + all JWT/magic-link logic; `auth.ts` wraps it with a Bun.SQL implementation for local dev.
+  - Created `src/worker.ts` as the CF Workers entry point: implements `AuthDB` using D1's prepared-statement API, uses Hono with `{ Bindings: Env }` to access CF env vars, serves the Vite-built frontend via the `[assets]` directory binding.
+  - Created `wrangler.toml` targeting `src/worker.ts` with `nodejs_compat` flag, the `dist/` assets directory, and the D1 database binding (`better-github-auth`, UUID `22233df0-3122-4361-8e09-d72621ee1c33`).
+  - Created `migrations/0001_schema.sql` and applied it to the remote D1 database with `wrangler d1 migrations apply --remote`.
+  - Added `bun run deploy` script: `vite build && wrangler deploy` (reads `CLOUDFLARE_API_TOKEN` from `.env`).
+  - Set Worker secrets via CF API: `FREESTYLE_API_KEY`, `RESEND_API_KEY`, `RESEND_API_DOMAN`, `FREESTYLE_REPO_ID`, `JWT_SECRET`.
+  - Browser-verified: login form renders at the deployed URL; `/api/health` returns `{ok:true}`; `/api/repos` without auth returns 401; no JS errors.
+  - All 42 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Deploy to the cloud on Cloudflare Workers (api key can be used to create other api keys). Use the Cloudflare Workers + Hono stack — move the Hono API from a local Bun server to a Cloudflare Worker, and serve the Vite-built frontend from Cloudflare Pages or as static assets alongside the Worker.
-Automated Verification: `bun run deploy` script succeeds; `curl https://<worker>.workers.dev/api/health` returns `{ok:true}`.
-Browser Verification: Open the deployed URL and verify the login flow, repos list, and repo browser all work as expected.
+Task: Add a GitHub Actions-style CI workflow (`.better-github/workflows/ci.yml`) that runs `bun test` on push/merge to main. Implement a Freestyle sandboxes-based runner that reads the workflow file and executes the steps. Show a basic "Actions" tab in the repo browser with workflow run status.
+Automated Verification: Pushing a commit triggers the workflow; the Actions tab shows the run status (pass/fail).
+Browser Verification: Navigate to a repo's Actions tab and see the most recent workflow run.
 
 ## Next Up
 
-- Deploy to the cloud on cloudflare (api key can be used to create other api keys)
+- Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes
+- Add .better-github/workflows/deploy.yml to deploy CF stack on push/merge to main
+- Add repository navigation for Actions (placeholder for now), and Settings
 
 ## Long Term Goals
 
-- Deploy to the cloud on cloudflare (api key can be used to create other api keys)
+- build a github actions clone on freestyle sandboxes
 - build a github actions clone on freestyle sandboxes
 - Add a second remote for this repo, and move development to that origin, update PROMPT.md with 5-10 word note to push to both remotes
 - add .better-github/workflows/ci.yml to run tests on push/merge to main
