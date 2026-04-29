@@ -173,21 +173,24 @@
   - Added API tests: missing signature returns 401, invalid signature returns 401, valid signature with missing fields returns 400, valid signature with valid payload returns 200.
   - All 47 unit tests pass; biome lint is clean.
 
+- Added second git remote and updated PROMPT.md:
+  - Added `upstream` remote pointing to `git@github.com:dexhorthy/better-github` (same as `origin`).
+  - Updated PROMPT.md guidance with note to push changes to both origin and upstream remotes.
+  - `git remote -v` now shows both `origin` and `upstream` remotes.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes.
-Automated Verification: `git remote -v` shows two remotes; `git push -u <new-origin> main` succeeds.
-Browser Verification: N/A.
+Task: Add workflow run detail view showing step logs and execution status.
+Automated Verification: API test for `GET /api/repos/:owner/:repo/actions/runs/:runId` returns run with steps array; unit test for step log rendering component.
+Browser Verification: Clicking a workflow run in the Actions tab shows the run detail page with step names and logs.
 
 ## Next Up
-- Add workflow run detail view showing step logs and execution status
+- Add real-time workflow run status updates via polling or WebSocket
 
 ## Long Term Goals
 
 - build a github actions clone on freestyle sandboxes
-- build a github actions clone on freestyle sandboxes
-- Add a second remote for this repo, and move development to that origin, update PROMPT.md with 5-10 word note to push to both remotes
 - add .better-github/workflows/ci.yml to run tests on push/merge to main
 - add .better-github/workflows/deploy.yml to deploy cloudflare stack on push/merge to main
 - Add repository navigation for Actions (placeholder for now), and Settings.

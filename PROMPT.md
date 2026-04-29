@@ -6,6 +6,7 @@ you are working on cloning github
 3. stack is vite+hono+freestyle git
 4. env vars in .env
 5. if you run out of ideas, use websearch to search the web for github docs, keep your findings in research_findings/
+6. push changes to both origin and upstream remotes
 </guidance>
 
 <instructions>
