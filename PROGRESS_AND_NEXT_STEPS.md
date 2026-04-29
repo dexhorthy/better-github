@@ -148,15 +148,21 @@
   - Browser-verified: Actions tab shows workflow runs with status icons (In Progress, Failure) and the "Run workflow" button triggers new runs.
   - All 42 unit tests pass; biome lint is clean.
 
+- Added `.better-github/workflows/deploy.yml` for Cloudflare deployment:
+  - Workflow triggers on push to main branch only (not PRs).
+  - Steps: checkout, install deps, build with Vite, deploy via `bunx wrangler deploy`.
+  - Verified workflow parses correctly via `parseWorkflow()` and `shouldTrigger()` functions.
+  - API-verified: POST `/api/repos/:owner/:repo/actions/runs` with deploy.yml content returns 201 and creates a queued run.
+  - All 42 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add .better-github/workflows/deploy.yml to deploy the Cloudflare stack on push/merge to main.
-Automated Verification: The deploy.yml file parses correctly and can be triggered via the API.
-Browser Verification: View the deploy workflow in the Actions tab.
+Task: Add webhook endpoint to trigger workflows on push events.
+Automated Verification: POST `/api/webhooks/push` with a push payload triggers the appropriate workflow runs.
+Browser Verification: N/A (webhook endpoint, no UI).
 
 ## Next Up
-- Add webhook endpoint to trigger workflows on push events
 - Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes
 
 ## Long Term Goals
