@@ -295,12 +295,19 @@
   - Browser-verified on the deployed Worker with a temporary AgentMail inbox (`better-github-codex-1777490097@agentmail.to`): magic-link login worked, Actions loaded, clicking "Run workflow" inserted and displayed a new queued `CI` run.
   - All 91 unit tests pass; typecheck and Biome lint are clean; all 4 Playwright e2e tests pass.
 
+- Added `GET /api/repos/:owner/:repo/workflows` to `src/worker.ts`:
+  - Reuses `fetchWorkflowFiles(repo)` from `freestyle-git.ts`; bridges `c.env.FREESTYLE_API_KEY` and `FREESTYLE_REPO_ID` into `process.env` so the Freestyle SDK call works in the Worker runtime.
+  - Behind `requireAuth`, returns the same `WorkflowFile[]` shape as the local Bun server.
+  - Added two `src/worker.test.ts` cases: unauthenticated request returns 401; authenticated request returns a JSON array (empty when `FREESTYLE_API_KEY` is unset).
+  - All 93 unit tests pass; biome check and `tsc --noEmit` are clean.
+  - Deployed Worker version `16dd938d-2b64-4134-9412-576a976bebe6`; `curl -s -o /dev/null -w "%{http_code}" https://better-github.dexter-de6.workers.dev/api/repos/dexhorthy/better-github/workflows` returns `401` for unauthenticated requests.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add Worker-backed workflow file routes (`GET /api/repos/:owner/:repo/workflows` first) so the deployed "View workflows" button can load workflow YAML from Freestyle Git.
-Automated Verification: Worker-level test asserting authenticated `GET /api/repos/:owner/:repo/workflows` returns workflow file metadata/content and unauthenticated requests return 401.
-Browser Verification: On deployed Worker, click Actions → "View workflows" and verify the workflow file list/editor renders instead of an error.
+Task: Add Worker-backed write routes for workflow files (`POST /workflows`, `PUT /workflows/:name`, `DELETE /workflows/:name`) so the deployed Workflow editor can create/save/delete workflow files end-to-end.
+Automated Verification: Worker-level tests asserting each route requires auth (401), validates required body fields (400), and on success returns 200/201 from the Worker.
+Browser Verification: On deployed Worker, open Actions → "View workflows", create a new workflow, edit and save it, then delete it; confirm Freestyle Git reflects each change via `GET /workflows` after each step.
 
 ## Next Up
 

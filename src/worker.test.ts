@@ -269,6 +269,39 @@ test("POST actions/runs creates a queued workflow run in D1", async () => {
 	expect(rows[0]?.status).toBe("queued");
 });
 
+test("GET workflows returns 401 without auth", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/workflows",
+		),
+		{ DB: db, JWT_SECRET: "test-secret" },
+	);
+	expect(res.status).toBe(401);
+});
+
+test("GET workflows returns array (empty when no FREESTYLE_API_KEY)", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const db = makeFakeD1([]);
+	const prevKey = process.env.FREESTYLE_API_KEY;
+	delete process.env.FREESTYLE_API_KEY;
+	try {
+		const res = await workerApp.fetch(
+			new Request(
+				"http://localhost/api/repos/dexhorthy/better-github/workflows",
+				{ headers: { Authorization: `Bearer ${token}` } },
+			),
+			{ DB: db, JWT_SECRET: jwtSecret },
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as unknown;
+		expect(Array.isArray(body)).toBe(true);
+	} finally {
+		if (prevKey !== undefined) process.env.FREESTYLE_API_KEY = prevKey;
+	}
+});
+
 test("POST actions/runs/:runId/cancel cancels a queued run in D1", async () => {
 	const jwtSecret = "test-secret";
 	const token = await signJwt({ email: "test@example.com" }, jwtSecret);

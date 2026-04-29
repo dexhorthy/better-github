@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import type { AuthDB, MagicLinkResult, VerifyResult } from "./auth-core";
 import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth-core";
 import { repositories } from "./data";
-import { fetchFreestyleRepoData } from "./freestyle-git";
+import { fetchFreestyleRepoData, fetchWorkflowFiles } from "./freestyle-git";
 import { buildRepositoryOverview } from "./repository-overview";
 import type { WorkflowStepResult } from "./types";
 import {
@@ -378,6 +378,18 @@ app.post(
 		return c.json({ ok: true });
 	},
 );
+
+app.get("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
+	const { repo } = c.req.param();
+	if (c.env.FREESTYLE_API_KEY) {
+		process.env.FREESTYLE_API_KEY = c.env.FREESTYLE_API_KEY;
+	}
+	if (c.env.FREESTYLE_REPO_ID) {
+		process.env.FREESTYLE_REPO_ID = c.env.FREESTYLE_REPO_ID;
+	}
+	const workflowFiles = await fetchWorkflowFiles(repo);
+	return c.json(workflowFiles);
+});
 
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();
