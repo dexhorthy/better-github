@@ -2,9 +2,12 @@ import { expect, test } from "bun:test";
 import type { D1Database } from "@cloudflare/workers-types";
 import { signJwt } from "./auth-core";
 import {
+	_getLastRunPromise,
 	getWorkflowRunD1,
 	insertWorkflowRunD1,
 	listWorkflowRunsD1,
+	resetWorkflowExecutor,
+	setWorkflowExecutor,
 	app as workerApp,
 } from "./worker";
 
@@ -266,15 +269,14 @@ test("POST actions/runs creates a queued workflow run in D1", async () => {
 	expect(rows).toHaveLength(1);
 	expect(rows[0]?.id).toBe(body.id);
 	expect(rows[0]?.workflow_name).toBe("Worker CI");
-	expect(rows[0]?.status).toBe("queued");
+	const pending = _getLastRunPromise();
+	if (pending) await pending.catch(() => {});
 });
 
 test("GET workflows returns 401 without auth", async () => {
 	const db = makeFakeD1([]);
 	const res = await workerApp.fetch(
-		new Request(
-			"http://localhost/api/repos/dexhorthy/better-github/workflows",
-		),
+		new Request("http://localhost/api/repos/dexhorthy/better-github/workflows"),
 		{ DB: db, JWT_SECRET: "test-secret" },
 	);
 	expect(res.status).toBe(401);
@@ -305,11 +307,14 @@ test("GET workflows returns array (empty when no FREESTYLE_API_KEY)", async () =
 test("POST workflows returns 401 without auth", async () => {
 	const db = makeFakeD1([]);
 	const res = await workerApp.fetch(
-		new Request("http://localhost/api/repos/dexhorthy/better-github/workflows", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name: "x.yml", content: "name: x" }),
-		}),
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/workflows",
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "x.yml", content: "name: x" }),
+			},
+		),
 		{ DB: db, JWT_SECRET: "test-secret" },
 	);
 	expect(res.status).toBe(401);
@@ -320,14 +325,17 @@ test("POST workflows returns 400 when name missing", async () => {
 	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
 	const db = makeFakeD1([]);
 	const res = await workerApp.fetch(
-		new Request("http://localhost/api/repos/dexhorthy/better-github/workflows", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				"Content-Type": "application/json",
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/workflows",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ content: "name: x" }),
 			},
-			body: JSON.stringify({ content: "name: x" }),
-		}),
+		),
 		{ DB: db, JWT_SECRET: jwtSecret },
 	);
 	expect(res.status).toBe(400);
@@ -338,14 +346,17 @@ test("POST workflows returns 400 when content missing", async () => {
 	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
 	const db = makeFakeD1([]);
 	const res = await workerApp.fetch(
-		new Request("http://localhost/api/repos/dexhorthy/better-github/workflows", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				"Content-Type": "application/json",
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/workflows",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ name: "ci.yml" }),
 			},
-			body: JSON.stringify({ name: "ci.yml" }),
-		}),
+		),
 		{ DB: db, JWT_SECRET: jwtSecret },
 	);
 	expect(res.status).toBe(400);
@@ -430,6 +441,70 @@ test("DELETE workflows/:name returns 401 without auth", async () => {
 		{ DB: db, JWT_SECRET: "test-secret" },
 	);
 	expect(res.status).toBe(401);
+});
+
+test("POST actions/runs executes workflow and persists success+logs+steps to D1", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const rows: Row[] = [];
+	const db = makeFakeD1(rows);
+
+	setWorkflowExecutor(
+		async (_workflow, _repoUrl, _branch, _commitSha, _runId) => ({
+			success: true,
+			cancelled: false,
+			logs: "fake-execution-logs",
+			steps: [
+				{
+					name: "Test",
+					status: "success",
+					logs: "fake step ok",
+					startedAt: "2026-01-07T00:00:00Z",
+					completedAt: "2026-01-07T00:00:01Z",
+				},
+			],
+		}),
+	);
+
+	try {
+		const res = await workerApp.fetch(
+			new Request(
+				"http://localhost/api/repos/dexhorthy/better-github/actions/runs",
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						branch: "main",
+						commitSha: "abc123",
+						workflowContent:
+							"name: Worker CI\non:\n  push:\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Test\n        run: bun test",
+					}),
+				},
+			),
+			{ DB: db, JWT_SECRET: jwtSecret },
+		);
+		expect(res.status).toBe(201);
+
+		const pending = _getLastRunPromise();
+		if (!pending) throw new Error("expected pending run promise");
+		await pending;
+
+		expect(rows).toHaveLength(1);
+		const row = rows[0];
+		if (!row) throw new Error("expected row");
+		expect(row.status).toBe("success");
+		expect(row.conclusion).toBe("success");
+		expect(row.logs).toBe("fake-execution-logs");
+		expect(row.completed_at).toBeString();
+		const steps = JSON.parse(String(row.steps)) as { name: string }[];
+		expect(steps).toHaveLength(1);
+		expect(steps[0]?.name).toBe("Test");
+	} finally {
+		resetWorkflowExecutor();
+	}
 });
 
 test("POST actions/runs/:runId/cancel cancels a queued run in D1", async () => {

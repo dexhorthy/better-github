@@ -318,12 +318,21 @@
   - Deployed Worker version `d7b7f7ec-8a9a-4a92-bd25-db4f95e91f96`; verified live CRUD against `/api/repos/dexhorthy/better-github/workflows` with an AgentMail-issued JWT: list → POST `opus-test` → list (3 entries) → PUT (content updated) → DELETE → list (back to 2).
   - All 100 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Wired the workflow executor into the deployed Worker so `POST /api/repos/:owner/:repo/actions/runs` runs the workflow on a Freestyle VM and persists its terminal status to D1:
+  - Added an injectable `WorkflowExecutor` in `src/worker.ts` (default: `executeWorkflowRun` from `workflows.ts`); after inserting the queued run, the handler kicks off an async chain that flips status to `in_progress`, awaits the executor, then writes back `status` (`success`/`failure`/`cancelled`), `conclusion`, `completedAt`, `logs`, and `steps` via `updateWorkflowRunD1`.
+  - Wraps the chain in `c.executionCtx?.waitUntil()` (try/catch — Hono throws on the getter when there's no execution context, e.g. in tests) so Cloudflare keeps the Worker alive past the response. Errors during execution write a `failure` row with the error message as `logs`.
+  - Exposed `setWorkflowExecutor` / `resetWorkflowExecutor` and `_getLastRunPromise` so tests can stub the executor and await the background work deterministically.
+  - Added `src/worker.test.ts` case "POST actions/runs executes workflow and persists success+logs+steps to D1" that stubs the executor with a fake success result, fires the POST, awaits `_getLastRunPromise()`, and asserts the row flips to `status=success`/`conclusion=success` with the fake logs and one persisted step.
+  - Updated the prior "creates a queued workflow run" test to drain the run promise (avoids races with the new in_progress write).
+  - Deployed Worker version `35846949-011b-42d5-81f8-8b4d2540309a` to `https://better-github.dexter-de6.workers.dev`.
+  - All 101 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Now that workflow file CRUD is live on the deployed Worker, run an actual workflow on a Freestyle VM from a `POST /api/repos/:owner/:repo/actions/runs` request and persist its terminal status (`success`/`failure`) + `logs` + `steps` back into D1 — i.e. wire the run executor into `worker.ts` instead of just inserting a `queued` row.
-Automated Verification: Add a Worker test that stubs the executor, calls `POST /actions/runs`, and asserts the row eventually flips from `queued` to `success` with non-empty `logs` and at least one step (using a fake D1 store).
-Browser Verification: On deployed Worker, click "Run workflow" in the Actions tab and watch the run move from queued → in_progress → success/failure with step logs visible in the run detail.
+Task: Surface real-time workflow run status updates on the deployed Worker. The local Bun server already broadcasts `WorkflowRun` updates over `/ws` via `src/websocket.ts`, but `worker.ts` has no WebSocket handler, so the deployed Actions tab silently falls back to no live updates after `queued`. Wire a WebSocket route on the Worker (e.g. via Cloudflare Durable Objects or `WebSocketPair`) so the executor's status transitions push to subscribed clients the same way the Bun server does.
+Automated Verification: Add a Worker test that opens a fake WebSocket against the route, sends a subscribe message for a runId, and asserts the executor's status updates emit messages to the socket (mock the WS pair).
+Browser Verification: On deployed Worker, click "Run workflow" and watch the run detail flip from queued → in_progress → success/failure live without manual refresh.
 
 ## Next Up
 

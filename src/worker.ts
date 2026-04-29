@@ -13,10 +13,41 @@ import {
 import { buildRepositoryOverview } from "./repository-overview";
 import type { WorkflowStepResult } from "./types";
 import {
+	executeWorkflowRun,
 	parseWorkflow,
 	requestCancellation,
+	type Workflow,
 	type WorkflowRun,
 } from "./workflows";
+
+export type WorkflowExecutor = (
+	workflow: Workflow,
+	repoUrl: string,
+	branch: string,
+	commitSha: string,
+	runId: string,
+) => Promise<{
+	success: boolean;
+	logs: string;
+	steps: WorkflowStepResult[];
+	cancelled: boolean;
+}>;
+
+let workflowExecutor: WorkflowExecutor = executeWorkflowRun;
+
+export function setWorkflowExecutor(fn: WorkflowExecutor): void {
+	workflowExecutor = fn;
+}
+
+export function resetWorkflowExecutor(): void {
+	workflowExecutor = executeWorkflowRun;
+}
+
+let lastRunPromise: Promise<void> | null = null;
+
+export function _getLastRunPromise(): Promise<void> | null {
+	return lastRunPromise;
+}
 
 type Env = {
 	DB: D1Database;
@@ -359,6 +390,55 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	};
 
 	await insertWorkflowRunD1(c.env.DB, run);
+
+	bridgeFreestyleEnv(c.env);
+	const repoUrl = `https://git.freestyle.sh/${c.env.FREESTYLE_REPO_ID ?? ""}`;
+	const db = c.env.DB;
+	const execPromise = (async () => {
+		try {
+			await updateWorkflowRunD1(db, runId, { status: "in_progress" });
+			const result = await workflowExecutor(
+				workflow,
+				repoUrl,
+				branch,
+				commitSha,
+				runId,
+			);
+			const status: WorkflowRun["status"] = result.cancelled
+				? "cancelled"
+				: result.success
+					? "success"
+					: "failure";
+			const conclusion: WorkflowRun["conclusion"] = result.cancelled
+				? "cancelled"
+				: result.success
+					? "success"
+					: "failure";
+			await updateWorkflowRunD1(db, runId, {
+				status,
+				conclusion,
+				completedAt: new Date().toISOString(),
+				logs: result.logs,
+				steps: result.steps,
+			});
+		} catch (err) {
+			console.error("workflow execution failed", err);
+			await updateWorkflowRunD1(db, runId, {
+				status: "failure",
+				conclusion: "failure",
+				completedAt: new Date().toISOString(),
+				logs: err instanceof Error ? err.message : String(err),
+			}).catch(() => {});
+		}
+	})();
+
+	lastRunPromise = execPromise;
+	try {
+		c.executionCtx?.waitUntil?.(execPromise);
+	} catch {
+		// no executionCtx in test environments
+	}
+
 	return c.json({ id: runId, status: "queued" }, 201);
 });
 
