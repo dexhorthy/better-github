@@ -91,6 +91,25 @@ describe("auth api", () => {
 
 describe("repository api", () => {
 	test("/api/repos without token returns 401", async () => {
+		const response = await app.request("/api/repos");
+		expect(response.status).toBe(401);
+	});
+
+	test("/api/repos returns list of repositories", async () => {
+		const token = await getTestToken();
+		const response = await app.request("/api/repos", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		const body = (await response.json()) as { name: string; owner: string }[];
+
+		expect(response.status).toBe(200);
+		expect(Array.isArray(body)).toBe(true);
+		expect(body.length).toBeGreaterThanOrEqual(2);
+		expect(body.map((r) => r.name)).toContain("better-github");
+		expect(body.map((r) => r.name)).toContain("hello-world");
+	});
+
+	test("/api/repos/:owner/:repo without token returns 401", async () => {
 		const response = await app.request("/api/repos/dexhorthy/better-github");
 		expect(response.status).toBe(401);
 	});

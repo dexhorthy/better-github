@@ -70,6 +70,10 @@ const requireAuth: MiddlewareHandler = async (c, next) => {
 	await next();
 };
 
+app.get("/api/repos", requireAuth, (c) => {
+	return c.json(repositories);
+});
+
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();
 	const path = c.req.query("path") ?? "";

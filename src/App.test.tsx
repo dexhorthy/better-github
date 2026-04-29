@@ -6,6 +6,7 @@ import {
 	ReadmePreview,
 	RepoHomeLink,
 	readPathFromSearch,
+	parseRoute,
 } from "./App";
 
 describe("ReadmePreview", () => {
@@ -107,6 +108,29 @@ describe("readPathFromSearch", () => {
 
 	test("trims surrounding slashes so the API receives a clean path", () => {
 		expect(readPathFromSearch("?path=/src/App.tsx/")).toBe("src/App.tsx");
+	});
+});
+
+describe("parseRoute", () => {
+	test("returns repos page for root path", () => {
+		expect(parseRoute("/")).toEqual({ page: "repos" });
+		expect(parseRoute("")).toEqual({ page: "repos" });
+	});
+
+	test("returns repo page for /:owner/:repo", () => {
+		expect(parseRoute("/dexhorthy/better-github")).toEqual({
+			page: "repo",
+			owner: "dexhorthy",
+			repo: "better-github",
+		});
+	});
+
+	test("returns repo page for /:owner/:repo/ (trailing slash)", () => {
+		expect(parseRoute("/dexhorthy/hello-world/")).toEqual({
+			page: "repo",
+			owner: "dexhorthy",
+			repo: "hello-world",
+		});
 	});
 });
 

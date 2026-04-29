@@ -100,16 +100,28 @@
   - All 34 unit tests pass with Postgres; biome lint is clean.
   - Browser-verified: login form shows email input + "Send magic link"; submitting shows "Check your email" confirmation.
 
+- Added a repositories list page at `/` (after login):
+  - `GET /api/repos` (auth-required) returns the full `repositories` array.
+  - Added a second fixture repository `dexhorthy/hello-world` in `src/data.ts`.
+  - `parseRoute(pathname)` helper maps `/` → `{ page: "repos" }` and `/:owner/:repo` → `{ page: "repo", owner, repo }`.
+  - `RepoList` component fetches `/api/repos` and renders each repo as a card: name link, description, visibility badge, language, and relative updated time.
+  - `App` now routes between `RepoList` (at `/`) and `RepoBrowser` (at `/:owner/:repo`) using `window.history.pushState` and `popstate` for SPA navigation.
+  - `RepoBrowser` accepts `owner` and `repo` as props and uses them in the API URL instead of hardcoded values.
+  - `RepoHomeLink` accepts an optional `href` prop (defaults to `"/"`) so the repo title link targets `/:owner/:repo`.
+  - Added unit tests for `parseRoute` (root, `/:owner/:repo`, trailing slash).
+  - Added API test asserting `GET /api/repos` returns 200 with ≥ 2 entries including both fixture repos.
+  - Browser-verified: after login, repos list shows `dexhorthy/better-github` and `dexhorthy/hello-world`; clicking a repo navigates to `/:owner/:repo` with the code browser; pressing back returns to the list.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Support multiple repositories. Add a repositories list page at `/` (after login) that shows all repos for the logged-in user. Each repo is its own row with name, description, visibility, and last-updated. Clicking a repo navigates to `/:owner/:repo`. Move the current single-repo code-browser to `/:owner/:repo`. Wire a second seeded Freestyle repo (or use fixture data) so at least 2 repos appear in the list.
-Automated Verification: New API endpoint `GET /api/repos` returns an array of repositories; existing repo tests still pass.
-Browser Verification: After login, see a list of repos; click one to open the code browser.
+Task: Add a "back to repositories" link in `RepoBrowser` so users can navigate from a repo back to the list without using the browser back button. Render a small breadcrumb above the repo header: `Better GitHub / dexhorthy` where `Better GitHub` navigates to `/`.
+Automated Verification: Unit test asserts the breadcrumb link renders and calls `onBack` on click.
+Browser Verification: While viewing a repo, click the breadcrumb link and confirm the repos list appears.
 
 ## Next Up
 
-- support for private/public repos and multiple repositories
+- Deploy to the cloud on cloudflare (api key can be used to create other api keys)
 
 ## Long Term Goals
 

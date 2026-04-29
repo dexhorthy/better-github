@@ -18,13 +18,28 @@ import {
 	Star,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { RepositoryOverview } from "./types";
+import type { GitRepository, RepositoryOverview } from "./types";
 import "./styles.css";
 
 type LoadState =
 	| { status: "loading" }
 	| { status: "ready"; data: RepositoryOverview }
 	| { status: "error"; message: string };
+
+type RepoListState =
+	| { status: "loading" }
+	| { status: "ready"; repos: GitRepository[] }
+	| { status: "error"; message: string };
+
+export type Route =
+	| { page: "repos" }
+	| { page: "repo"; owner: string; repo: string };
+
+export function parseRoute(pathname: string): Route {
+	const parts = pathname.split("/").filter(Boolean);
+	if (parts.length >= 2) return { page: "repo", owner: parts[0], repo: parts[1] };
+	return { page: "repos" };
+}
 
 type AuthState =
 	| { status: "unauthenticated" }
@@ -185,15 +200,17 @@ export function buildPathSearch(path: string): string {
 export function RepoHomeLink({
 	name,
 	onHome,
+	href = "/",
 }: {
 	name: string;
 	onHome: () => void;
+	href?: string;
 }) {
 	return (
 		<a
 			className="repo-home-link"
 			data-testid="repo-home-link"
-			href="/"
+			href={href}
 			onClick={(event) => {
 				if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
 					return;
@@ -215,6 +232,108 @@ export function ReadmePreview({ text }: { text: string }) {
 			</div>
 			<pre className="readme-body">{text}</pre>
 		</div>
+	);
+}
+
+export function RepoList({
+	auth,
+	onSignOut,
+	onSelectRepo,
+}: {
+	auth: Extract<AuthState, { status: "authenticated" }>;
+	onSignOut: () => void;
+	onSelectRepo: (owner: string, repo: string) => void;
+}) {
+	const [state, setState] = useState<RepoListState>({ status: "loading" });
+
+	useEffect(() => {
+		fetch("/api/repos", {
+			headers: { Authorization: `Bearer ${auth.token}` },
+		})
+			.then((r) => {
+				if (r.status === 401) {
+					onSignOut();
+					throw new Error("Session expired. Please sign in again.");
+				}
+				if (!r.ok) throw new Error("Could not load repositories");
+				return r.json() as Promise<GitRepository[]>;
+			})
+			.then((repos) => setState({ status: "ready", repos }))
+			.catch((e: Error) => setState({ status: "error", message: e.message }));
+	}, [auth.token, onSignOut]);
+
+	return (
+		<main className="app-shell">
+			<header className="topbar">
+				<div className="brand">
+					<Code2 size={28} aria-hidden="true" />
+					<span>Better GitHub</span>
+				</div>
+				<label className="search">
+					<Search size={16} aria-hidden="true" />
+					<input
+						placeholder="Search or jump to..."
+						aria-label="Search or jump to"
+					/>
+				</label>
+				<div className="topbar-user">
+					<span className="topbar-email">{auth.email}</span>
+					<button
+						type="button"
+						className="signout-button"
+						onClick={onSignOut}
+						data-testid="signout-button"
+						title="Sign out"
+					>
+						<LogOut size={16} aria-hidden="true" />
+						Sign out
+					</button>
+				</div>
+			</header>
+
+			<div className="repos-container">
+				<h1 className="repos-heading">Repositories</h1>
+				{state.status === "loading" && (
+					<p className="repos-status">Loading repositories…</p>
+				)}
+				{state.status === "error" && (
+					<p className="repos-status repos-error">{state.message}</p>
+				)}
+				{state.status === "ready" && (
+					<div className="repo-list" data-testid="repo-list">
+						{state.repos.map((r) => (
+							<article className="repo-list-item" key={r.id} data-testid="repo-list-item">
+								<div className="repo-list-item-header">
+									<BookOpen size={16} aria-hidden="true" />
+									<a
+										className="repo-list-name"
+										href={`/${r.owner}/${r.name}`}
+										onClick={(e) => {
+											if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+												return;
+											e.preventDefault();
+											onSelectRepo(r.owner, r.name);
+										}}
+									>
+										{r.owner}/{r.name}
+									</a>
+									<span className="visibility">{r.visibility}</span>
+								</div>
+								{r.description && (
+									<p className="repo-list-description">{r.description}</p>
+								)}
+								<div className="repo-list-meta">
+									{r.language && <span>{r.language}</span>}
+									<time dateTime={r.updatedAt}>
+										Updated {timeAgo(r.updatedAt)}
+									</time>
+								</div>
+							</article>
+						))}
+					</div>
+				)}
+			</div>
+		</main>
 	);
 }
 
@@ -241,9 +360,15 @@ export function LineNumberedCode({ text }: { text: string }) {
 function RepoBrowser({
 	auth,
 	onSignOut,
+	owner,
+	repo,
+	onBack,
 }: {
 	auth: Extract<AuthState, { status: "authenticated" }>;
 	onSignOut: () => void;
+	owner: string;
+	repo: string;
+	onBack: () => void;
 }) {
 	const [state, setState] = useState<LoadState>({ status: "loading" });
 	const [path, setPath] = useState(() =>
@@ -274,7 +399,7 @@ function RepoBrowser({
 	useEffect(() => {
 		const params = new URLSearchParams();
 		if (path) params.set("path", path);
-		const url = `/api/repos/dexhorthy/better-github${params.size ? `?${params}` : ""}`;
+		const url = `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}${params.size ? `?${params}` : ""}`;
 
 		setState({ status: "loading" });
 		fetch(url, {
@@ -292,7 +417,7 @@ function RepoBrowser({
 			.catch((error: Error) =>
 				setState({ status: "error", message: error.message }),
 			);
-	}, [path, auth.token, onSignOut]);
+	}, [path, auth.token, onSignOut, owner, repo]);
 
 	const activePrs = useMemo(() => {
 		if (state.status !== "ready") return 0;
@@ -361,7 +486,11 @@ function RepoBrowser({
 						<BookOpen size={20} aria-hidden="true" />
 						<span>{repository.owner}</span>
 						<span className="slash">/</span>
-						<RepoHomeLink name={repository.name} onHome={() => setPath("")} />
+						<RepoHomeLink
+							name={repository.name}
+							onHome={() => setPath("")}
+							href={`/${owner}/${repo}`}
+						/>
 						<span className="visibility">{repository.visibility}</span>
 					</div>
 					<p>{repository.description}</p>
@@ -549,6 +678,23 @@ function RepoBrowser({
 
 function App() {
 	const [auth, setAuth] = useState<AuthState>(() => loadStoredAuth());
+	const [route, setRoute] = useState<Route>(() =>
+		typeof window === "undefined"
+			? { page: "repos" }
+			: parseRoute(window.location.pathname),
+	);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const handle = () => setRoute(parseRoute(window.location.pathname));
+		window.addEventListener("popstate", handle);
+		return () => window.removeEventListener("popstate", handle);
+	}, []);
+
+	function navigateTo(pathname: string) {
+		window.history.pushState({}, "", pathname);
+		setRoute(parseRoute(pathname));
+	}
 
 	function handleAuth(token: string, email: string) {
 		if (typeof window !== "undefined") {
@@ -570,7 +716,25 @@ function App() {
 		return <AuthForm onAuth={handleAuth} />;
 	}
 
-	return <RepoBrowser auth={auth} onSignOut={handleSignOut} />;
+	if (route.page === "repos") {
+		return (
+			<RepoList
+				auth={auth}
+				onSignOut={handleSignOut}
+				onSelectRepo={(owner, repo) => navigateTo(`/${owner}/${repo}`)}
+			/>
+		);
+	}
+
+	return (
+		<RepoBrowser
+			auth={auth}
+			onSignOut={handleSignOut}
+			owner={route.owner}
+			repo={route.repo}
+			onBack={() => navigateTo("/")}
+		/>
+	);
 }
 
 export default App;

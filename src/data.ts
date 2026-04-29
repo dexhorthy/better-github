@@ -30,6 +30,22 @@ export const repositories: GitRepository[] = [
 		updatedAt: "2026-04-29T13:10:00.000Z",
 		topics: ["github-clone", "vite", "hono", "freestyle-git"],
 	},
+	{
+		id: "hello-world",
+		owner: "dexhorthy",
+		name: "hello-world",
+		description:
+			"A minimal example application demonstrating Freestyle Git hosting.",
+		visibility: "Public",
+		defaultBranch: "main",
+		stars: 5,
+		forks: 2,
+		watchers: 1,
+		language: "TypeScript",
+		license: "MIT",
+		updatedAt: "2026-04-28T10:00:00.000Z",
+		topics: ["example", "freestyle-git"],
+	},
 ];
 
 export const branches: GitBranch[] = [
