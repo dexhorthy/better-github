@@ -15,10 +15,12 @@ import {
 } from "./freestyle-git";
 import { buildRepositoryOverview } from "./repository-overview";
 import type { WorkflowStepResult } from "./types";
+import { verifyWebhookSignature } from "./webhook-signature";
 import {
 	executeWorkflowRun,
 	parseWorkflow,
 	requestCancellation,
+	shouldTrigger,
 	type Workflow,
 	type WorkflowRun,
 } from "./workflows";
@@ -61,6 +63,7 @@ type Env = {
 	FREESTYLE_REPO_ID?: string;
 	RESEND_API_KEY?: string;
 	RESEND_API_DOMAN?: string;
+	WEBHOOK_SECRET?: string;
 	WS_BROADCASTER?: DurableObjectNamespace;
 };
 
@@ -89,6 +92,20 @@ export function setBroadcaster(fn: Broadcaster): void {
 
 export function resetBroadcaster(): void {
 	broadcaster = defaultBroadcaster;
+}
+
+export type WorkflowFileFetcher = (
+	repoName: string,
+) => Promise<{ name: string; content: string }[]>;
+
+let workflowFileFetcher: WorkflowFileFetcher = fetchWorkflowFiles;
+
+export function setWorkflowFileFetcher(fn: WorkflowFileFetcher): void {
+	workflowFileFetcher = fn;
+}
+
+export function resetWorkflowFileFetcher(): void {
+	workflowFileFetcher = fetchWorkflowFiles;
 }
 
 type Variables = {
@@ -444,9 +461,21 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	await broadcaster(run, c.env);
 
 	bridgeFreestyleEnv(c.env);
-	const repoUrl = `https://git.freestyle.sh/${c.env.FREESTYLE_REPO_ID ?? ""}`;
-	const db = c.env.DB;
-	const env = c.env;
+	startWorkflowExecution(c.env, runId, workflow, branch, commitSha, c);
+
+	return c.json({ id: runId, status: "queued" }, 201);
+});
+
+function startWorkflowExecution(
+	env: Env,
+	runId: string,
+	workflow: Workflow,
+	branch: string,
+	commitSha: string,
+	c?: { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } },
+): Promise<void> {
+	const db = env.DB;
+	const repoUrl = `https://git.freestyle.sh/${env.FREESTYLE_REPO_ID ?? ""}`;
 	const execPromise = (async () => {
 		try {
 			await updateWorkflowRunD1(db, runId, { status: "in_progress" });
@@ -499,12 +528,76 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 
 	lastRunPromise = execPromise;
 	try {
-		c.executionCtx?.waitUntil?.(execPromise);
+		c?.executionCtx?.waitUntil?.(execPromise);
 	} catch {
 		// no executionCtx in test environments
 	}
+	return execPromise;
+}
 
-	return c.json({ id: runId, status: "queued" }, 201);
+app.post("/api/webhooks/push", async (c) => {
+	const rawBody = await c.req.text();
+	const signatureHeader = c.req.header("X-Hub-Signature-256");
+
+	const isValid = await verifyWebhookSignature(
+		rawBody,
+		signatureHeader,
+		c.env.WEBHOOK_SECRET,
+	);
+	if (!isValid) {
+		return c.json({ error: "Invalid webhook signature" }, 401);
+	}
+
+	let body: {
+		owner?: string;
+		repo?: string;
+		branch?: string;
+		commitSha?: string;
+	};
+	try {
+		body = JSON.parse(rawBody);
+	} catch {
+		return c.json({ error: "Invalid JSON body" }, 400);
+	}
+
+	const { owner, repo, branch, commitSha } = body;
+	if (!owner || !repo || !branch || !commitSha) {
+		return c.json(
+			{ error: "Missing required fields: owner, repo, branch, commitSha" },
+			400,
+		);
+	}
+
+	bridgeFreestyleEnv(c.env);
+	const workflowFiles = await workflowFileFetcher(repo);
+	if (workflowFiles.length === 0) {
+		return c.json({ message: "No workflows found", triggered: [] });
+	}
+
+	const triggered: { id: string; workflowName: string }[] = [];
+	for (const wf of workflowFiles) {
+		const workflow = parseWorkflow(wf.content);
+		if (!workflow) continue;
+		if (!shouldTrigger(workflow, "push", branch)) continue;
+
+		const runId = crypto.randomUUID();
+		const run: WorkflowRun = {
+			id: runId,
+			workflowName: workflow.name,
+			repoOwner: owner,
+			repoName: repo,
+			branch,
+			commitSha,
+			status: "queued",
+			startedAt: new Date().toISOString(),
+		};
+		await insertWorkflowRunD1(c.env.DB, run);
+		await broadcaster(run, c.env);
+		triggered.push({ id: runId, workflowName: workflow.name });
+		startWorkflowExecution(c.env, runId, workflow, branch, commitSha, c);
+	}
+
+	return c.json({ message: "Push event processed", triggered });
 });
 
 app.post(

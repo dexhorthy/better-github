@@ -345,12 +345,23 @@
   - Deployed Worker version `332228b8-ea05-4abc-a998-92382a93bf81` to `https://better-github.dexter-de6.workers.dev`.
   - All 105 unit tests pass; typecheck and Biome lint are clean.
 
+- Added `POST /api/webhooks/push` to `src/worker.ts` to auto-trigger D1-backed workflow runs on push events:
+  - Refactored `src/webhook-signature.ts` so `computeWebhookSignature`/`verifyWebhookSignature` accept an optional explicit `secret` (still falls back to `process.env.WEBHOOK_SECRET`), so the Worker can pass `c.env.WEBHOOK_SECRET` instead of relying on `process.env`.
+  - Worker route verifies `X-Hub-Signature-256` against `c.env.WEBHOOK_SECRET`, parses `{owner, repo, branch, commitSha}`, fetches workflow files via `fetchWorkflowFiles`, runs `parseWorkflow` + `shouldTrigger("push", branch)`, inserts a queued `WorkflowRun` into D1 per match, and kicks off execution via the same lifecycle helper used by `POST /actions/runs` (broadcasts queued → in_progress → final).
+  - Extracted the run lifecycle into a `startWorkflowExecution` helper inside `worker.ts` so the manual `POST /actions/runs` and the new webhook share identical code (broadcast on each transition, write back terminal status/logs/steps to D1, swallow execution errors as `failure` rows).
+  - Added an injectable `WorkflowFileFetcher` (`setWorkflowFileFetcher`/`resetWorkflowFileFetcher`) so tests can stub the Freestyle workflow file lookup.
+  - Added `WEBHOOK_SECRET?: string` to the worker `Env` type.
+  - Added 5 worker tests: missing signature → 401; invalid signature → 401; valid signature + missing fields → 400; valid signature + no matching workflows → 200 with empty `triggered`; valid signature + matching workflow inserts a queued row, kicks off the stubbed executor, and the row flips to `success`.
+  - Deployed Worker version `5c4f57f6-a524-4041-880c-cc3a153e456e` to `https://better-github.dexter-de6.workers.dev`.
+  - Live-verified end-to-end: `curl -X POST .../api/webhooks/push` with a valid HMAC signature and `commitSha=webhook-test-001` returned `200 {"triggered":[{CI},{Deploy}]}`, confirming both `.better-github/workflows/ci.yml` and `deploy.yml` matched the push event and queued runs in remote D1.
+  - All 110 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Auto-trigger the deploy workflow on push to main. Currently `.better-github/workflows/deploy.yml` exists but nothing pushes a webhook to the deployed Worker on commits — manual UI clicks are still the only trigger path. Add a `POST /api/webhooks/push` route to `src/worker.ts` (D1-backed) that mirrors the local Bun server's webhook: verify `X-Hub-Signature-256` against `WEBHOOK_SECRET`, fetch workflow files via `fetchWorkflowFiles`, run `parseWorkflow` + `shouldTrigger` for the push event, and insert+execute matching workflow runs.
-Automated Verification: Add Worker tests asserting (a) missing/invalid signature returns 401, (b) valid signature with no matching workflows returns 200 with empty `triggered`, (c) valid signature with a matching workflow inserts a row into the fake D1.
-Browser Verification: After deploy, run `curl -X POST https://better-github.dexter-de6.workers.dev/api/webhooks/push` with a valid signature and the deploy.yml-matching payload; verify a new run appears in the Actions tab UI.
+Task: Wire a real push trigger into the seed flow so committing locally actually fires the deployed Worker's webhook. Today `bun run seed:freestyle` upserts files into Freestyle Git but never POSTs `/api/webhooks/push`, so the new webhook only runs when curled by hand. Extend the seed script (or add a small `bun run trigger:webhook` helper) that, after a successful Freestyle push, computes the HMAC signature with `WEBHOOK_SECRET` and POSTs `{owner, repo, branch, commitSha}` to `https://better-github.dexter-de6.workers.dev/api/webhooks/push` (URL configurable via env). Add a `WEBHOOK_SECRET` entry to `.env.example` / TUTORIAL.md and set the secret on the deployed Worker via `wrangler secret put` so the production webhook isn't relying on the dev default.
+Automated Verification: Add a unit test for the new helper that, given a fake `fetch`, verifies it computes the correct `X-Hub-Signature-256` and posts the `{owner, repo, branch, commitSha}` body.
+Browser Verification: Run `bun run seed:freestyle better-github`, then refresh the Actions tab on the deployed app and confirm a new `Deploy` run appears at the top of the list within a few seconds without any manual `curl`.
 
 ## Next Up
 

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { D1Database } from "@cloudflare/workers-types";
 import { signJwt } from "./auth-core";
+import { computeWebhookSignature } from "./webhook-signature";
 import {
 	_getLastRunPromise,
 	getWorkflowRunD1,
@@ -687,4 +688,157 @@ test("WorkflowBroadcaster replays latest cached run on subscribe", () => {
 	expect(parsed.run.id).toBe("run-cached");
 	expect(parsed.run.status).toBe("in_progress");
 	expect(parsed.run.steps).toHaveLength(1);
+});
+
+test("POST /api/webhooks/push returns 401 with missing signature", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request("http://localhost/api/webhooks/push", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				owner: "dexhorthy",
+				repo: "better-github",
+				branch: "main",
+				commitSha: "abc",
+			}),
+		}),
+		{ DB: db, WEBHOOK_SECRET: "test-webhook-secret" },
+	);
+	expect(res.status).toBe(401);
+});
+
+test("POST /api/webhooks/push returns 401 with invalid signature", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request("http://localhost/api/webhooks/push", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Hub-Signature-256": "sha256=deadbeef",
+			},
+			body: JSON.stringify({
+				owner: "dexhorthy",
+				repo: "better-github",
+				branch: "main",
+				commitSha: "abc",
+			}),
+		}),
+		{ DB: db, WEBHOOK_SECRET: "test-webhook-secret" },
+	);
+	expect(res.status).toBe(401);
+});
+
+test("POST /api/webhooks/push returns 200 with empty triggered when no workflows match", async () => {
+	const { setWorkflowFileFetcher, resetWorkflowFileFetcher } = await import(
+		"./worker"
+	);
+	const db = makeFakeD1([]);
+	const secret = "test-webhook-secret";
+	const payload = JSON.stringify({
+		owner: "dexhorthy",
+		repo: "better-github",
+		branch: "main",
+		commitSha: "abc",
+	});
+	const sig = await computeWebhookSignature(payload, secret);
+	setWorkflowFileFetcher(async () => []);
+	try {
+		const res = await workerApp.fetch(
+			new Request("http://localhost/api/webhooks/push", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Hub-Signature-256": sig,
+				},
+				body: payload,
+			}),
+			{ DB: db, WEBHOOK_SECRET: secret },
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { triggered: unknown[] };
+		expect(body.triggered).toEqual([]);
+	} finally {
+		resetWorkflowFileFetcher();
+	}
+});
+
+test("POST /api/webhooks/push returns 400 when fields missing", async () => {
+	const db = makeFakeD1([]);
+	const secret = "test-webhook-secret";
+	const payload = JSON.stringify({ owner: "dexhorthy" });
+	const sig = await computeWebhookSignature(payload, secret);
+	const res = await workerApp.fetch(
+		new Request("http://localhost/api/webhooks/push", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Hub-Signature-256": sig,
+			},
+			body: payload,
+		}),
+		{ DB: db, WEBHOOK_SECRET: secret },
+	);
+	expect(res.status).toBe(400);
+});
+
+test("POST /api/webhooks/push inserts a run for matching workflow and executes", async () => {
+	const { setWorkflowFileFetcher, resetWorkflowFileFetcher } = await import(
+		"./worker"
+	);
+	const rows: Row[] = [];
+	const db = makeFakeD1(rows);
+	const secret = "test-webhook-secret";
+	const payload = JSON.stringify({
+		owner: "dexhorthy",
+		repo: "better-github",
+		branch: "main",
+		commitSha: "deadbeef",
+	});
+	const sig = await computeWebhookSignature(payload, secret);
+
+	setWorkflowFileFetcher(async () => [
+		{
+			name: "deploy.yml",
+			content:
+				"name: Deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: freestyle-vm\n    steps:\n      - name: Deploy\n        run: echo hi",
+		},
+	]);
+	setWorkflowExecutor(async () => ({
+		success: true,
+		logs: "hooked",
+		steps: [{ name: "Deploy", status: "success", logs: "ok" }],
+		cancelled: false,
+	}));
+	setBroadcaster(() => {});
+
+	try {
+		const res = await workerApp.fetch(
+			new Request("http://localhost/api/webhooks/push", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Hub-Signature-256": sig,
+				},
+				body: payload,
+			}),
+			{ DB: db, WEBHOOK_SECRET: secret },
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			triggered: { id: string; workflowName: string }[];
+		};
+		expect(body.triggered).toHaveLength(1);
+		expect(body.triggered[0]?.workflowName).toBe("Deploy");
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.workflow_name).toBe("Deploy");
+		expect(rows[0]?.commit_sha).toBe("deadbeef");
+		const pending = _getLastRunPromise();
+		if (pending) await pending.catch(() => {});
+		expect(rows[0]?.status).toBe("success");
+	} finally {
+		resetWorkflowFileFetcher();
+		resetWorkflowExecutor();
+		resetBroadcaster();
+	}
 });

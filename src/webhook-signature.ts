@@ -1,11 +1,18 @@
-const WEBHOOK_SECRET =
-	process.env.WEBHOOK_SECRET ?? "dev-webhook-secret-change-in-production";
+const DEFAULT_WEBHOOK_SECRET = "dev-webhook-secret-change-in-production";
 
-export async function computeWebhookSignature(body: string): Promise<string> {
+function resolveSecret(secret?: string): string {
+	if (secret) return secret;
+	return process.env.WEBHOOK_SECRET ?? DEFAULT_WEBHOOK_SECRET;
+}
+
+export async function computeWebhookSignature(
+	body: string,
+	secret?: string,
+): Promise<string> {
 	const encoder = new TextEncoder();
 	const key = await crypto.subtle.importKey(
 		"raw",
-		encoder.encode(WEBHOOK_SECRET),
+		encoder.encode(resolveSecret(secret)),
 		{ name: "HMAC", hash: "SHA-256" },
 		false,
 		["sign"],
@@ -20,9 +27,10 @@ export async function computeWebhookSignature(body: string): Promise<string> {
 export async function verifyWebhookSignature(
 	body: string,
 	signatureHeader: string | undefined,
+	secret?: string,
 ): Promise<boolean> {
 	if (!signatureHeader) return false;
-	const expected = await computeWebhookSignature(body);
+	const expected = await computeWebhookSignature(body, secret);
 	if (signatureHeader.length !== expected.length) return false;
 	let result = 0;
 	for (let i = 0; i < expected.length; i++) {
