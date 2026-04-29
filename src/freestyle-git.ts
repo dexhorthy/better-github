@@ -77,6 +77,30 @@ export type WorkflowFile = {
 	content: string;
 };
 
+export async function saveWorkflowFile(
+	repoName: string,
+	fileName: string,
+	content: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	try {
+		const repoId = await findFreestyleRepoId(repoName);
+		if (!repoId) return { ok: false, error: "Repository not found" };
+
+		const repo = freestyle.git.repos.ref({ repoId });
+		const path = `.better-github/workflows/${fileName}`;
+
+		await repo.contents.upsert({
+			path,
+			content: Buffer.from(content).toString("base64"),
+			message: `Update ${fileName}`,
+		});
+
+		return { ok: true };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+	}
+}
+
 export async function fetchWorkflowFiles(
 	repoName: string,
 ): Promise<WorkflowFile[]> {

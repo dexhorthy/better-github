@@ -217,6 +217,36 @@ describe("workflows endpoint", () => {
 		);
 		expect(response.status).toBe(401);
 	});
+
+	test("PUT workflow returns 400 when content is missing", async () => {
+		const token = await getTestToken();
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows/ci.yml",
+			{
+				method: "PUT",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({}),
+			},
+		);
+		expect(response.status).toBe(400);
+		const body = (await response.json()) as { error: string };
+		expect(body.error).toBe("Missing content");
+	});
+
+	test("PUT workflow requires authentication", async () => {
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows/ci.yml",
+			{
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ content: "name: CI\non: push\njobs: {}" }),
+			},
+		);
+		expect(response.status).toBe(401);
+	});
 });
 
 describe("freestyle seed files", () => {

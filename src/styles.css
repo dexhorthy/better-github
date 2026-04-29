@@ -1310,3 +1310,59 @@ button.run-item {
 	max-height: 600px;
 	overflow-y: auto;
 }
+
+.workflow-file-actions {
+	margin-left: auto;
+}
+
+.workflow-save-btn {
+	padding: 5px 16px;
+	font-size: 14px;
+	font-weight: 500;
+	color: #fff;
+	background: #1f883d;
+	border: 1px solid rgba(31, 35, 40, 0.15);
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.workflow-save-btn:hover:not(:disabled) {
+	background: #1a7f37;
+}
+
+.workflow-save-btn:disabled {
+	background: #94d3a2;
+	cursor: not-allowed;
+}
+
+.workflow-unsaved-indicator {
+	color: #9a6700;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.workflow-save-error {
+	margin: 0;
+	padding: 8px 16px;
+	font-size: 14px;
+	color: #cf222e;
+	background: #ffebe9;
+	border-bottom: 1px solid #d0d7de;
+}
+
+.workflow-textarea {
+	width: 100%;
+	min-height: 400px;
+	padding: 12px 16px;
+	font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+	font-size: 13px;
+	line-height: 1.5;
+	color: #1f2328;
+	background: #fff;
+	border: none;
+	resize: vertical;
+}
+
+.workflow-textarea:focus {
+	outline: none;
+}

@@ -10,7 +10,7 @@ import {
 	repositories,
 } from "./data";
 import type { FreestyleRepoData } from "./freestyle-git";
-import { fetchFreestyleRepoData, fetchWorkflowFiles } from "./freestyle-git";
+import { fetchFreestyleRepoData, fetchWorkflowFiles, saveWorkflowFile } from "./freestyle-git";
 import type { RepositoryOverview } from "./types";
 import { verifyWebhookSignature } from "./webhook-signature";
 import {
@@ -311,11 +311,27 @@ app.post(
 	},
 );
 
-// Workflow files endpoint
+// Workflow files endpoints
 app.get("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
 	const { repo } = c.req.param();
 	const workflowFiles = await fetchWorkflowFiles(repo);
 	return c.json(workflowFiles);
+});
+
+app.put("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
+	const { repo, name } = c.req.param();
+	const body = (await c.req.json().catch(() => ({}))) as { content?: string };
+
+	if (!body.content) {
+		return c.json({ error: "Missing content" }, 400);
+	}
+
+	const result = await saveWorkflowFile(repo, name, body.content);
+	if (!result.ok) {
+		return c.json({ error: result.error }, 500);
+	}
+
+	return c.json({ ok: true });
 });
 
 // Less specific route comes after more specific /actions/runs routes

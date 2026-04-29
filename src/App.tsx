@@ -435,8 +435,11 @@ export function WorkflowEditor({
 }) {
 	const [state, setState] = useState<WorkflowFilesState>({ status: "loading" });
 	const [selectedFile, setSelectedFile] = useState<string | null>(null);
+	const [editedContent, setEditedContent] = useState<string | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [saveError, setSaveError] = useState<string | null>(null);
 
-	useEffect(() => {
+	const loadWorkflows = () => {
 		fetch(
 			`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/workflows`,
 			{
@@ -454,12 +457,57 @@ export function WorkflowEditor({
 				}
 			})
 			.catch((e: Error) => setState({ status: "error", message: e.message }));
-	}, [auth.token, owner, repo, selectedFile]);
+	};
+
+	useEffect(() => {
+		loadWorkflows();
+	}, [auth.token, owner, repo]);
 
 	const selectedWorkflow =
 		state.status === "ready"
 			? state.files.find((f) => f.name === selectedFile)
 			: null;
+
+	const currentContent = editedContent ?? selectedWorkflow?.content ?? "";
+	const hasChanges = editedContent !== null && editedContent !== selectedWorkflow?.content;
+
+	const handleSave = async () => {
+		if (!selectedFile || !editedContent) return;
+		setSaving(true);
+		setSaveError(null);
+
+		try {
+			const response = await fetch(
+				`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/workflows/${encodeURIComponent(selectedFile)}`,
+				{
+					method: "PUT",
+					headers: {
+						Authorization: `Bearer ${auth.token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ content: editedContent }),
+				},
+			);
+
+			if (!response.ok) {
+				const data = await response.json().catch(() => ({}));
+				throw new Error((data as { error?: string }).error ?? "Failed to save");
+			}
+
+			setEditedContent(null);
+			loadWorkflows();
+		} catch (e) {
+			setSaveError(e instanceof Error ? e.message : "Failed to save");
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const handleSelectFile = (fileName: string) => {
+		setSelectedFile(fileName);
+		setEditedContent(null);
+		setSaveError(null);
+	};
 
 	return (
 		<div className="workflow-editor" data-testid="workflow-editor">
@@ -497,7 +545,7 @@ export function WorkflowEditor({
 								type="button"
 								className={`workflow-file-item ${selectedFile === file.name ? "selected" : ""}`}
 								key={file.name}
-								onClick={() => setSelectedFile(file.name)}
+								onClick={() => handleSelectFile(file.name)}
 								data-testid="workflow-file-item"
 							>
 								<FileCode size={16} aria-hidden="true" />
@@ -513,8 +561,35 @@ export function WorkflowEditor({
 							<div className="workflow-file-header">
 								<FileCode size={16} aria-hidden="true" />
 								<strong>{selectedWorkflow.name}</strong>
+								{hasChanges && (
+									<span className="workflow-unsaved-indicator" data-testid="workflow-unsaved">
+										(unsaved)
+									</span>
+								)}
+								<div className="workflow-file-actions">
+									<button
+										type="button"
+										className="workflow-save-btn"
+										onClick={handleSave}
+										disabled={!hasChanges || saving}
+										data-testid="workflow-save-btn"
+									>
+										{saving ? "Saving..." : "Save"}
+									</button>
+								</div>
 							</div>
-							<LineNumberedCode text={selectedWorkflow.content} />
+							{saveError && (
+								<p className="workflow-save-error" data-testid="workflow-save-error">
+									{saveError}
+								</p>
+							)}
+							<textarea
+								className="workflow-textarea"
+								value={currentContent}
+								onChange={(e) => setEditedContent(e.target.value)}
+								spellCheck={false}
+								data-testid="workflow-textarea"
+							/>
 						</div>
 					)}
 				</div>

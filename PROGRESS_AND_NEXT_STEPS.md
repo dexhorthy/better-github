@@ -234,12 +234,22 @@
   - Fixed `collectTrackedTextFiles` to skip files deleted from working tree but still in git index.
   - All 71 tests pass; biome lint is clean.
 
+- Added workflow file editing (save changes back to Freestyle Git):
+  - Added `saveWorkflowFile(repoName, fileName, content)` function in `freestyle-git.ts` using `repo.contents.upsert()` API.
+  - Added `PUT /api/repos/:owner/:repo/workflows/:name` endpoint to save workflow file content.
+  - Updated `WorkflowEditor` component with editable textarea, Save button, and "(unsaved)" indicator.
+  - Save button is disabled when no changes; enables when content differs from original.
+  - Added CSS styles for save button, unsaved indicator, and error display.
+  - Added API tests: missing content returns 400, requires authentication returns 401.
+  - Browser-verified: workflow files list, editable textarea, unsaved indicator appears on edit.
+  - All 73 tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add workflow file editing (save changes back to Freestyle Git).
-Automated Verification: API test for PUT /api/repos/:owner/:repo/workflows/:name endpoint.
-Browser Verification: Users can edit workflow YAML in the WorkflowEditor and save changes.
+Task: Add workflow file creation (create new workflow files).
+Automated Verification: API test for POST /api/repos/:owner/:repo/workflows endpoint.
+Browser Verification: Users can create a new workflow file with a custom name.
 
 ## Next Up
 - Fixed: magic-link email pointed at `/api/auth/verify?token=...` (raw JSON page) instead of `/?token=...` (frontend auto-verify). Updated `sendMagicLinkEmail` in `src/auth-core.ts` to link to the frontend root so the React handler completes the sign-in. TODO: add a regression test asserting the email body contains `${baseUrl}/?token=` and not `/api/auth/verify`.
