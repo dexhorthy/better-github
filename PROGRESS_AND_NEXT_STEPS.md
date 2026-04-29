@@ -263,15 +263,20 @@
   - Added API test asserting DELETE workflow requires authentication.
   - All 78 tests pass; biome lint is clean.
 
+- Added magic-link email regression test:
+  - Created `src/auth-core.test.ts` with tests for `sendMagicLinkEmail` function.
+  - Test verifies email link uses frontend path (`/?token=`) not API endpoint (`/api/auth/verify`).
+  - Test verifies token is URL-encoded in the link.
+  - All 80 tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add magic-link email regression test asserting email body contains `${baseUrl}/?token=` not `/api/auth/verify`.
-Automated Verification: Unit test that mocks Resend API and verifies the email body format.
-Browser Verification: N/A (backend test only).
+Task: Add workflow run logs persistence (save VM stdout/stderr to database for later retrieval).
+Automated Verification: API test that creates a run, waits for completion, and verifies logs are returned in the run detail.
+Browser Verification: Verify run detail page shows step logs after run completes.
 
 ## Next Up
-- Fixed: magic-link email pointed at `/api/auth/verify?token=...` (raw JSON page) instead of `/?token=...` (frontend auto-verify). Updated `sendMagicLinkEmail` in `src/auth-core.ts` to link to the frontend root so the React handler completes the sign-in. TODO: add a regression test asserting the email body contains `${baseUrl}/?token=` and not `/api/auth/verify`.
 
 ## Long Term Goals
 
