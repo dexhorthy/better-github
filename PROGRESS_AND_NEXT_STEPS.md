@@ -337,12 +337,20 @@
   - Hardened the long-running `completed run includes logs and steps in detail response` test by giving it a 60s timeout (it was flaky at the default 5s when running against real Freestyle VMs).
   - All 104 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Cached latest WorkflowRun state in the `WorkflowBroadcaster` Durable Object and replay it on subscribe:
+  - Added `latestRuns: Map<runId, WorkflowRun>` populated by every `broadcast(run)` call.
+  - When a WebSocket client sends `{ type: "subscribe", runId }`, the DO now immediately sends the cached `run_update` (full detail) for that runId if one exists, so late subscribers see the queued/in_progress state instead of waiting for the next transition.
+  - Made `attach`/`broadcast` public on `WorkflowBroadcaster` so unit tests can drive the DO without a Cloudflare runtime.
+  - Added Worker test (`WorkflowBroadcaster replays latest cached run on subscribe`) that constructs the DO directly, broadcasts an `in_progress` run, attaches a fake `EventTarget`-based WebSocket, dispatches a `subscribe` message, and asserts the fake socket received the cached `run_update` with full steps.
+  - Deployed Worker version `332228b8-ea05-4abc-a998-92382a93bf81` to `https://better-github.dexter-de6.workers.dev`.
+  - All 105 unit tests pass; typecheck and Biome lint are clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Persist the WebSocket subscriber set across DO requests and replay the latest run state on subscribe. Currently `WorkflowBroadcaster` only forwards live broadcasts — a client that connects after the executor has already emitted `queued`/`in_progress` will silently miss those messages and only see the next state change. Maintain an in-DO `Map<runId, WorkflowRun>` (latest state) and, when a client sends `{ type: "subscribe", runId }`, immediately send them the cached `run_update` if one exists.
-Automated Verification: Add a Worker test that constructs the DO directly, calls `broadcast(run)` once with `status: "in_progress"`, then attaches a fake WebSocket and sends a `subscribe` message — assert the fake socket received a `run_update` for that runId.
-Browser Verification: On deployed Worker, click "Run workflow" and immediately open the run detail; the queued/in_progress badge should appear without waiting for the next state change.
+Task: Auto-trigger the deploy workflow on push to main. Currently `.better-github/workflows/deploy.yml` exists but nothing pushes a webhook to the deployed Worker on commits — manual UI clicks are still the only trigger path. Add a `POST /api/webhooks/push` route to `src/worker.ts` (D1-backed) that mirrors the local Bun server's webhook: verify `X-Hub-Signature-256` against `WEBHOOK_SECRET`, fetch workflow files via `fetchWorkflowFiles`, run `parseWorkflow` + `shouldTrigger` for the push event, and insert+execute matching workflow runs.
+Automated Verification: Add Worker tests asserting (a) missing/invalid signature returns 401, (b) valid signature with no matching workflows returns 200 with empty `triggered`, (c) valid signature with a matching workflow inserts a row into the fake D1.
+Browser Verification: After deploy, run `curl -X POST https://better-github.dexter-de6.workers.dev/api/webhooks/push` with a valid signature and the deploy.yml-matching payload; verify a new run appears in the Actions tab UI.
 
 ## Next Up
 

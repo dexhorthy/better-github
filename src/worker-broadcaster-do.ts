@@ -8,6 +8,7 @@ export class WorkflowBroadcaster {
 	private clients = new Set<WebSocket>();
 	private subscriptions = new Map<string, Set<WebSocket>>();
 	private wsRuns = new WeakMap<WebSocket, Set<string>>();
+	private latestRuns = new Map<string, WorkflowRun>();
 
 	async fetch(req: Request): Promise<Response> {
 		const url = new URL(req.url);
@@ -38,7 +39,7 @@ export class WorkflowBroadcaster {
 		return new Response("not found", { status: 404 });
 	}
 
-	private attach(ws: WebSocket) {
+	attach(ws: WebSocket) {
 		this.clients.add(ws);
 		this.wsRuns.set(ws, new Set());
 		ws.addEventListener("message", (ev: MessageEvent) => {
@@ -54,6 +55,14 @@ export class WorkflowBroadcaster {
 						this.subscriptions.set(data.runId, set);
 					}
 					set.add(ws);
+					const cached = this.latestRuns.get(data.runId);
+					if (cached) {
+						try {
+							ws.send(JSON.stringify({ type: "run_update", run: cached }));
+						} catch {
+							// drop
+						}
+					}
 				} else if (data.type === "unsubscribe") {
 					subs.delete(data.runId);
 					this.subscriptions.get(data.runId)?.delete(ws);
@@ -77,7 +86,8 @@ export class WorkflowBroadcaster {
 		ws.addEventListener("error", cleanup);
 	}
 
-	private broadcast(run: WorkflowRun) {
+	broadcast(run: WorkflowRun) {
+		this.latestRuns.set(run.id, run);
 		const detailed = JSON.stringify({ type: "run_update", run });
 		const summaryRun = {
 			id: run.id,

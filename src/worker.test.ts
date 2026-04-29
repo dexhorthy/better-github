@@ -12,6 +12,7 @@ import {
 	setWorkflowExecutor,
 	app as workerApp,
 } from "./worker";
+import { WorkflowBroadcaster } from "./worker-broadcaster-do";
 import type { WorkflowRun } from "./workflows";
 
 type Row = Record<string, unknown>;
@@ -637,4 +638,53 @@ test("POST actions/runs/:runId/cancel cancels a queued run in D1", async () => {
 	expect(rows[0]?.status).toBe("cancelled");
 	expect(rows[0]?.conclusion).toBe("cancelled");
 	expect(rows[0]?.completed_at).toBeString();
+});
+
+test("WorkflowBroadcaster replays latest cached run on subscribe", () => {
+	const broadcaster = new WorkflowBroadcaster();
+	const run: WorkflowRun = {
+		id: "run-cached",
+		workflowName: "CI",
+		repoOwner: "dexhorthy",
+		repoName: "better-github",
+		branch: "main",
+		commitSha: "abc",
+		status: "in_progress",
+		startedAt: "2026-04-29T00:00:00Z",
+		logs: "queued line\n",
+		steps: [
+			{
+				name: "checkout",
+				status: "success",
+				startedAt: "2026-04-29T00:00:00Z",
+				completedAt: "2026-04-29T00:00:01Z",
+				logs: "ok",
+			},
+		],
+	};
+	broadcaster.broadcast(run);
+
+	const sent: string[] = [];
+	const fakeWs = new EventTarget() as EventTarget & {
+		send: (s: string) => void;
+	};
+	fakeWs.send = (s: string) => {
+		sent.push(s);
+	};
+	broadcaster.attach(fakeWs as unknown as WebSocket);
+	fakeWs.dispatchEvent(
+		new MessageEvent("message", {
+			data: JSON.stringify({ type: "subscribe", runId: "run-cached" }),
+		}),
+	);
+
+	expect(sent).toHaveLength(1);
+	const parsed = JSON.parse(sent[0] ?? "") as {
+		type: string;
+		run: WorkflowRun;
+	};
+	expect(parsed.type).toBe("run_update");
+	expect(parsed.run.id).toBe("run-cached");
+	expect(parsed.run.status).toBe("in_progress");
+	expect(parsed.run.steps).toHaveLength(1);
 });
