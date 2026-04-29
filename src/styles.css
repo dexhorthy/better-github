@@ -774,3 +774,178 @@ input {
 	font-size: 12px;
 	color: #59636e;
 }
+
+/* Actions Tab */
+.actions-tab {
+	grid-column: 1 / -1;
+	background: #fff;
+	border: 1px solid #d0d7de;
+	border-radius: 6px;
+	padding: 20px;
+}
+
+.actions-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 20px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid #d0d7de;
+}
+
+.actions-header h2 {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.trigger-run-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	font-size: 14px;
+	font-weight: 500;
+	color: #fff;
+	background: #238636;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.trigger-run-button:hover {
+	background: #2ea043;
+}
+
+.trigger-run-button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.actions-status {
+	color: #59636e;
+	font-size: 14px;
+	text-align: center;
+	padding: 40px 20px;
+}
+
+.actions-error {
+	color: #cf222e;
+}
+
+.runs-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.run-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+	background: #f6f8fa;
+	border: 1px solid #d0d7de;
+	border-radius: 6px;
+}
+
+.run-item:hover {
+	background: #eef1f4;
+}
+
+.run-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.run-info strong {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 2px;
+}
+
+.run-meta {
+	font-size: 12px;
+	color: #59636e;
+}
+
+.run-status-badge {
+	padding: 4px 10px;
+	font-size: 12px;
+	font-weight: 500;
+	border-radius: 20px;
+	text-transform: capitalize;
+}
+
+.run-status-badge[data-status="queued"] {
+	background: #ddf4ff;
+	color: #0969da;
+}
+
+.run-status-badge[data-status="in_progress"] {
+	background: #fff8c5;
+	color: #9a6700;
+}
+
+.run-status-badge[data-status="success"] {
+	background: #dafbe1;
+	color: #1a7f37;
+}
+
+.run-status-badge[data-status="failure"] {
+	background: #ffebe9;
+	color: #cf222e;
+}
+
+.run-status-queued {
+	color: #0969da;
+}
+
+.run-status-running {
+	color: #9a6700;
+	animation: spin 1s linear infinite;
+}
+
+.run-status-success {
+	color: #1a7f37;
+}
+
+.run-status-failure {
+	color: #cf222e;
+}
+
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.repo-tabs button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 12px 16px;
+	color: #59636e;
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	cursor: pointer;
+	font-size: inherit;
+}
+
+.repo-tabs button:hover:not(:disabled) {
+	color: #1f2328;
+}
+
+.repo-tabs button.active {
+	color: #1f2328;
+	border-bottom-color: #fd8c73;
+}
+
+.repo-tabs button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}

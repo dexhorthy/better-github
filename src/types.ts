@@ -64,3 +64,17 @@ export type RepositoryOverview = {
 	fileContent?: FileContent;
 	readme?: { text: string };
 };
+
+export type WorkflowRun = {
+	id: string;
+	workflowName: string;
+	repoOwner: string;
+	repoName: string;
+	branch: string;
+	commitSha: string;
+	status: "queued" | "in_progress" | "success" | "failure";
+	conclusion?: "success" | "failure" | "cancelled";
+	startedAt: string;
+	completedAt?: string;
+	logs?: string;
+};

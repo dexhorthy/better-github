@@ -129,18 +129,30 @@
   - Browser-verified: login form renders at the deployed URL; `/api/health` returns `{ok:true}`; `/api/repos` without auth returns 401; no JS errors.
   - All 42 unit tests pass; biome lint is clean.
 
+- Added GitHub Actions-style CI workflow infrastructure and Actions tab UI:
+  - Created `.better-github/workflows/ci.yml` with a basic workflow definition (checkout, bun install, bun test, lint).
+  - Created `src/workflows.ts` with workflow YAML parsing, trigger logic (`shouldTrigger`), and Freestyle VM-based execution (`executeWorkflowRun`) using the `oven/bun:1` base image.
+  - Created `src/workflow-db.ts` with Postgres `workflow_runs` table and CRUD operations (`insertWorkflowRun`, `updateWorkflowRun`, `getWorkflowRun`, `listWorkflowRuns`).
+  - Added API endpoints: `GET /api/repos/:owner/:repo/actions/runs` (list runs), `GET /api/repos/:owner/:repo/actions/runs/:runId` (get run), `POST /api/repos/:owner/:repo/actions/runs` (trigger run).
+  - Added `ActionsTab` component with workflow runs list, status icons (queued/in_progress/success/failure), and "Run workflow" button.
+  - Updated `RepoBrowser` with tab state switching between Code and Actions tabs.
+  - Added CSS styles for actions tab, run items, and status badges.
+  - Browser-verified: Actions tab shows "Workflow runs" heading and "Run workflow" button; clicking tab toggles between Code and Actions views.
+  - All 42 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add a GitHub Actions-style CI workflow (`.better-github/workflows/ci.yml`) that runs `bun test` on push/merge to main. Implement a Freestyle sandboxes-based runner that reads the workflow file and executes the steps. Show a basic "Actions" tab in the repo browser with workflow run status.
-Automated Verification: Pushing a commit triggers the workflow; the Actions tab shows the run status (pass/fail).
-Browser Verification: Navigate to a repo's Actions tab and see the most recent workflow run.
+Task: Wire up actual Freestyle VM execution for workflow runs. Currently the workflow runner has the structure but needs a valid Freestyle API key and VM provisioning. Test by triggering a run and verifying it completes with logs.
+Automated Verification: Trigger a workflow run via the UI; the run transitions from queued → in_progress → success/failure with logs.
+Browser Verification: Navigate to Actions tab, click "Run workflow", and see the run status update over time.
 
 ## Next Up
 
-- Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes
+- Wire up Freestyle VM execution to actually run CI jobs (needs FREESTYLE_API_KEY with VM permissions)
 - Add .better-github/workflows/deploy.yml to deploy CF stack on push/merge to main
-- Add repository navigation for Actions (placeholder for now), and Settings
+- Add webhook endpoint to trigger workflows on push events
+- Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes
 
 ## Long Term Goals
 

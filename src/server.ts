@@ -12,6 +12,17 @@ import {
 import type { FreestyleRepoData } from "./freestyle-git";
 import { fetchFreestyleRepoData } from "./freestyle-git";
 import type { RepositoryOverview } from "./types";
+import {
+	getWorkflowRun,
+	insertWorkflowRun,
+	listWorkflowRuns,
+	updateWorkflowRun,
+} from "./workflow-db";
+import {
+	executeWorkflowRun,
+	parseWorkflow,
+	type WorkflowRun,
+} from "./workflows";
 
 export const app = new Hono();
 
@@ -87,6 +98,78 @@ app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
 
 	const liveData = await fetchFreestyleRepoData(repo, path);
 	return c.json(buildRepositoryOverview(fixture, path, liveData));
+});
+
+app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
+	const { owner, repo } = c.req.param();
+	const runs = await listWorkflowRuns(owner, repo);
+	return c.json(runs);
+});
+
+app.get(
+	"/api/repos/:owner/:repo/actions/runs/:runId",
+	requireAuth,
+	async (c) => {
+		const { runId } = c.req.param();
+		const run = await getWorkflowRun(runId);
+		if (!run) return c.json({ message: "Run not found" }, 404);
+		return c.json(run);
+	},
+);
+
+app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
+	const { owner, repo } = c.req.param();
+	const body = (await c.req.json().catch(() => ({}))) as {
+		branch?: string;
+		commitSha?: string;
+		workflowContent?: string;
+	};
+
+	const branch = body.branch ?? "main";
+	const commitSha = body.commitSha ?? "manual";
+
+	const workflowContent =
+		body.workflowContent ??
+		`name: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Checkout\n        uses: checkout\n      - name: Install\n        run: bun install\n      - name: Test\n        run: bun test`;
+
+	const workflow = parseWorkflow(workflowContent);
+	if (!workflow) {
+		return c.json({ error: "Invalid workflow YAML" }, 400);
+	}
+
+	const runId = crypto.randomUUID();
+	const run: WorkflowRun = {
+		id: runId,
+		workflowName: workflow.name,
+		repoOwner: owner,
+		repoName: repo,
+		branch,
+		commitSha,
+		status: "queued",
+		startedAt: new Date().toISOString(),
+	};
+
+	await insertWorkflowRun(run);
+
+	// Execute in background
+	(async () => {
+		await updateWorkflowRun(runId, { status: "in_progress" });
+		const repoUrl = `https://git.freestyle.sh/${process.env.FREESTYLE_REPO_ID}`;
+		const result = await executeWorkflowRun(
+			workflow,
+			repoUrl,
+			branch,
+			commitSha,
+		);
+		await updateWorkflowRun(runId, {
+			status: result.success ? "success" : "failure",
+			conclusion: result.success ? "success" : "failure",
+			completedAt: new Date().toISOString(),
+			logs: result.logs,
+		});
+	})().catch(console.error);
+
+	return c.json({ id: runId, status: "queued" }, 201);
 });
 
 app.use("/*", serveStatic({ root: "./dist" }));

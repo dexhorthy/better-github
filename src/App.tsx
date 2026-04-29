@@ -1,7 +1,9 @@
 import {
 	BookOpen,
 	Bot,
+	CheckCircle2,
 	CircleDot,
+	Clock,
 	Code2,
 	Eye,
 	File,
@@ -12,13 +14,16 @@ import {
 	GitFork,
 	GitPullRequest,
 	History,
+	Loader2,
 	LockKeyhole,
 	LogOut,
+	Play,
 	Search,
 	Star,
+	XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { GitRepository, RepositoryOverview } from "./types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { GitRepository, RepositoryOverview, WorkflowRun } from "./types";
 import "./styles.css";
 
 type LoadState =
@@ -393,6 +398,155 @@ export function LineNumberedCode({ text }: { text: string }) {
 	);
 }
 
+type WorkflowRunsState =
+	| { status: "loading" }
+	| { status: "ready"; runs: WorkflowRun[] }
+	| { status: "error"; message: string };
+
+function RunStatusIcon({ status }: { status: WorkflowRun["status"] }) {
+	switch (status) {
+		case "queued":
+			return (
+				<Clock size={16} className="run-status-queued" aria-label="Queued" />
+			);
+		case "in_progress":
+			return (
+				<Loader2
+					size={16}
+					className="run-status-running"
+					aria-label="In progress"
+				/>
+			);
+		case "success":
+			return (
+				<CheckCircle2
+					size={16}
+					className="run-status-success"
+					aria-label="Success"
+				/>
+			);
+		case "failure":
+			return (
+				<XCircle
+					size={16}
+					className="run-status-failure"
+					aria-label="Failure"
+				/>
+			);
+	}
+}
+
+export function ActionsTab({
+	auth,
+	owner,
+	repo,
+	onSignOut,
+}: {
+	auth: Extract<AuthState, { status: "authenticated" }>;
+	owner: string;
+	repo: string;
+	onSignOut: () => void;
+}) {
+	const [state, setState] = useState<WorkflowRunsState>({ status: "loading" });
+	const [triggering, setTriggering] = useState(false);
+
+	const fetchRuns = useCallback(() => {
+		fetch(
+			`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs`,
+			{
+				headers: { Authorization: `Bearer ${auth.token}` },
+			},
+		)
+			.then((r) => {
+				if (r.status === 401) {
+					onSignOut();
+					throw new Error("Session expired");
+				}
+				if (!r.ok) throw new Error("Could not load workflow runs");
+				return r.json() as Promise<WorkflowRun[]>;
+			})
+			.then((runs) => setState({ status: "ready", runs }))
+			.catch((e: Error) => setState({ status: "error", message: e.message }));
+	}, [auth.token, owner, repo, onSignOut]);
+
+	useEffect(() => {
+		fetchRuns();
+		const interval = setInterval(fetchRuns, 5000);
+		return () => clearInterval(interval);
+	}, [fetchRuns]);
+
+	const triggerRun = async () => {
+		setTriggering(true);
+		try {
+			const response = await fetch(
+				`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${auth.token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ branch: "main" }),
+				},
+			);
+			if (response.ok) {
+				fetchRuns();
+			}
+		} finally {
+			setTriggering(false);
+		}
+	};
+
+	return (
+		<section className="actions-tab" data-testid="actions-tab">
+			<div className="actions-header">
+				<h2>Workflow runs</h2>
+				<button
+					type="button"
+					className="trigger-run-button"
+					onClick={triggerRun}
+					disabled={triggering}
+				>
+					<Play size={16} aria-hidden="true" />
+					{triggering ? "Triggering..." : "Run workflow"}
+				</button>
+			</div>
+			{state.status === "loading" && (
+				<p className="actions-status">Loading workflow runs...</p>
+			)}
+			{state.status === "error" && (
+				<p className="actions-status actions-error">{state.message}</p>
+			)}
+			{state.status === "ready" && state.runs.length === 0 && (
+				<p className="actions-status">
+					No workflow runs yet. Click "Run workflow" to start one.
+				</p>
+			)}
+			{state.status === "ready" && state.runs.length > 0 && (
+				<div className="runs-list" data-testid="runs-list">
+					{state.runs.map((run) => (
+						<article className="run-item" key={run.id} data-testid="run-item">
+							<RunStatusIcon status={run.status} />
+							<div className="run-info">
+								<strong>{run.workflowName}</strong>
+								<span className="run-meta">
+									{run.branch} · {run.commitSha.slice(0, 7)} ·{" "}
+									{timeAgo(run.startedAt)}
+								</span>
+							</div>
+							<span className="run-status-badge" data-status={run.status}>
+								{run.status === "in_progress" ? "In progress" : run.status}
+							</span>
+						</article>
+					))}
+				</div>
+			)}
+		</section>
+	);
+}
+
+type RepoTab = "code" | "actions";
+
 function RepoBrowser({
 	auth,
 	onSignOut,
@@ -407,6 +561,7 @@ function RepoBrowser({
 	onBack: () => void;
 }) {
 	const [state, setState] = useState<LoadState>({ status: "loading" });
+	const [activeTab, setActiveTab] = useState<RepoTab>("code");
 	const [path, setPath] = useState(() =>
 		typeof window === "undefined"
 			? ""
@@ -550,111 +705,130 @@ function RepoBrowser({
 			</section>
 
 			<nav className="repo-tabs" aria-label="Repository">
-				<a className="active" href="#code">
+				<button
+					type="button"
+					className={activeTab === "code" ? "active" : ""}
+					onClick={() => setActiveTab("code")}
+					data-testid="tab-code"
+				>
 					<Code2 size={16} aria-hidden="true" />
 					Code
-				</a>
-				<a href="#pulls">
+				</button>
+				<button type="button" disabled>
 					<GitPullRequest size={16} aria-hidden="true" />
 					Pull requests <span>{activePrs}</span>
-				</a>
-				<a href="#history">
+				</button>
+				<button
+					type="button"
+					className={activeTab === "actions" ? "active" : ""}
+					onClick={() => setActiveTab("actions")}
+					data-testid="tab-actions"
+				>
 					<History size={16} aria-hidden="true" />
 					Actions
-				</a>
+				</button>
 			</nav>
 
 			<div className="content-grid">
-				<section className="repo-main" id="code" aria-label="Code">
-					<div className="code-toolbar">
-						<button className="branch-button" type="button">
-							<GitBranch size={16} aria-hidden="true" />
-							{repository.defaultBranch}
-						</button>
-						<span>{branches.length} branches</span>
-						<span>{commits.length} commits</span>
-						<button className="code-button" type="button">
-							<Code2 size={16} aria-hidden="true" />
-							Code
-						</button>
-					</div>
-					<nav className="path-breadcrumbs" aria-label="Directory path">
-						<button type="button" onClick={() => setPath("")}>
-							<FolderOpen size={16} aria-hidden="true" />
-							{repository.name}
-						</button>
-						{pathSegments.map((segment, index) => (
-							<span key={pathSegments.slice(0, index + 1).join("/")}>
-								<span className="path-separator">/</span>
-								<button type="button" onClick={() => openPathSegment(index)}>
-									{segment}
-								</button>
-							</span>
-						))}
-					</nav>
-					<div className="latest-commit">
-						{latestCommit ? (
-							<>
-								<img src={latestCommit.author.avatarUrl} alt="" />
-								<strong>{latestCommit.author.login}</strong>
-								<span>{latestCommit.message}</span>
-								<code>{latestCommit.sha}</code>
-							</>
+				{activeTab === "code" ? (
+					<section className="repo-main" id="code" aria-label="Code">
+						<div className="code-toolbar">
+							<button className="branch-button" type="button">
+								<GitBranch size={16} aria-hidden="true" />
+								{repository.defaultBranch}
+							</button>
+							<span>{branches.length} branches</span>
+							<span>{commits.length} commits</span>
+							<button className="code-button" type="button">
+								<Code2 size={16} aria-hidden="true" />
+								Code
+							</button>
+						</div>
+						<nav className="path-breadcrumbs" aria-label="Directory path">
+							<button type="button" onClick={() => setPath("")}>
+								<FolderOpen size={16} aria-hidden="true" />
+								{repository.name}
+							</button>
+							{pathSegments.map((segment, index) => (
+								<span key={pathSegments.slice(0, index + 1).join("/")}>
+									<span className="path-separator">/</span>
+									<button type="button" onClick={() => openPathSegment(index)}>
+										{segment}
+									</button>
+								</span>
+							))}
+						</nav>
+						<div className="latest-commit">
+							{latestCommit ? (
+								<>
+									<img src={latestCommit.author.avatarUrl} alt="" />
+									<strong>{latestCommit.author.login}</strong>
+									<span>{latestCommit.message}</span>
+									<code>{latestCommit.sha}</code>
+								</>
+							) : (
+								<span>No commits yet</span>
+							)}
+						</div>
+						{fileContent ? (
+							<section
+								className="file-viewer"
+								aria-label={`Contents of ${fileContent.path}`}
+							>
+								<div className="file-viewer-header">
+									<File size={16} aria-hidden="true" />
+									<strong>{fileContent.name}</strong>
+									<span>{fileContent.size} bytes</span>
+								</div>
+								<LineNumberedCode text={fileContent.text} />
+							</section>
 						) : (
-							<span>No commits yet</span>
-						)}
-					</div>
-					{fileContent ? (
-						<section
-							className="file-viewer"
-							aria-label={`Contents of ${fileContent.path}`}
-						>
-							<div className="file-viewer-header">
-								<File size={16} aria-hidden="true" />
-								<strong>{fileContent.name}</strong>
-								<span>{fileContent.size} bytes</span>
-							</div>
-							<LineNumberedCode text={fileContent.text} />
-						</section>
-					) : (
-						<>
-							<div className="file-list">
-								{files.map((item) => {
-									const Icon = item.type === "directory" ? Folder : File;
-									const rowName =
-										item.type === "directory" ? (
-											<button
-												className="file-link"
-												type="button"
-												onClick={() => openDirectory(item.name)}
-											>
-												{item.name}
-											</button>
-										) : (
-											<button
-												className="file-link"
-												type="button"
-												onClick={() => openFile(item.name)}
-											>
-												{item.name}
-											</button>
+							<>
+								<div className="file-list">
+									{files.map((item) => {
+										const Icon = item.type === "directory" ? Folder : File;
+										const rowName =
+											item.type === "directory" ? (
+												<button
+													className="file-link"
+													type="button"
+													onClick={() => openDirectory(item.name)}
+												>
+													{item.name}
+												</button>
+											) : (
+												<button
+													className="file-link"
+													type="button"
+													onClick={() => openFile(item.name)}
+												>
+													{item.name}
+												</button>
+											);
+										return (
+											<div className="file-row" key={item.name}>
+												<Icon size={18} aria-hidden="true" />
+												{rowName}
+												<span>{item.lastCommit}</span>
+												<time dateTime={item.updatedAt}>
+													{timeAgo(item.updatedAt)}
+												</time>
+											</div>
 										);
-									return (
-										<div className="file-row" key={item.name}>
-											<Icon size={18} aria-hidden="true" />
-											{rowName}
-											<span>{item.lastCommit}</span>
-											<time dateTime={item.updatedAt}>
-												{timeAgo(item.updatedAt)}
-											</time>
-										</div>
-									);
-								})}
-							</div>
-							{readme && !path && <ReadmePreview text={readme.text} />}
-						</>
-					)}
-				</section>
+									})}
+								</div>
+								{readme && !path && <ReadmePreview text={readme.text} />}
+							</>
+						)}
+					</section>
+				) : (
+					<ActionsTab
+						auth={auth}
+						owner={owner}
+						repo={repo}
+						onSignOut={onSignOut}
+					/>
+				)}
 
 				<aside className="sidebar" aria-label="Repository details">
 					<section>
