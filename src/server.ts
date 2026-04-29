@@ -10,7 +10,7 @@ import {
 	repositories,
 } from "./data";
 import type { FreestyleRepoData } from "./freestyle-git";
-import { fetchFreestyleRepoData } from "./freestyle-git";
+import { fetchFreestyleRepoData, fetchWorkflowFiles } from "./freestyle-git";
 import type { RepositoryOverview } from "./types";
 import {
 	getWorkflowRun,
@@ -21,6 +21,7 @@ import {
 import {
 	executeWorkflowRun,
 	parseWorkflow,
+	shouldTrigger,
 	type WorkflowRun,
 } from "./workflows";
 
@@ -83,6 +84,74 @@ const requireAuth: MiddlewareHandler = async (c, next) => {
 
 app.get("/api/repos", requireAuth, (c) => {
 	return c.json(repositories);
+});
+
+// Webhook endpoint for push events
+app.post("/api/webhooks/push", async (c) => {
+	const body = (await c.req.json().catch(() => ({}))) as {
+		owner?: string;
+		repo?: string;
+		branch?: string;
+		commitSha?: string;
+	};
+
+	const { owner, repo, branch, commitSha } = body;
+
+	if (!owner || !repo || !branch || !commitSha) {
+		return c.json(
+			{ error: "Missing required fields: owner, repo, branch, commitSha" },
+			400,
+		);
+	}
+
+	const workflowFiles = await fetchWorkflowFiles(repo);
+	if (workflowFiles.length === 0) {
+		return c.json({ message: "No workflows found", triggered: [] });
+	}
+
+	const triggered: { id: string; workflowName: string }[] = [];
+
+	for (const wf of workflowFiles) {
+		const workflow = parseWorkflow(wf.content);
+		if (!workflow) continue;
+
+		if (!shouldTrigger(workflow, "push", branch)) continue;
+
+		const runId = crypto.randomUUID();
+		const run: WorkflowRun = {
+			id: runId,
+			workflowName: workflow.name,
+			repoOwner: owner,
+			repoName: repo,
+			branch,
+			commitSha,
+			status: "queued",
+			startedAt: new Date().toISOString(),
+		};
+
+		await insertWorkflowRun(run);
+		triggered.push({ id: runId, workflowName: workflow.name });
+
+		// Execute in background
+		(async () => {
+			await updateWorkflowRun(runId, { status: "in_progress" });
+			const repoUrl = `https://git.freestyle.sh/${process.env.FREESTYLE_REPO_ID}`;
+			const result = await executeWorkflowRun(
+				workflow,
+				repoUrl,
+				branch,
+				commitSha,
+			);
+			await updateWorkflowRun(runId, {
+				status: result.success ? "success" : "failure",
+				conclusion: result.success ? "success" : "failure",
+				completedAt: new Date().toISOString(),
+				logs: result.logs,
+			});
+		})().catch(console.error);
+	}
+
+	return c.json({ message: "Push event processed", triggered });
 });
 
 // More specific routes must come before less specific ones

@@ -155,11 +155,20 @@
   - API-verified: POST `/api/repos/:owner/:repo/actions/runs` with deploy.yml content returns 201 and creates a queued run.
   - All 42 unit tests pass; biome lint is clean.
 
+- Added webhook endpoint to trigger workflows on push events:
+  - Added `fetchWorkflowFiles(repoName)` helper in `freestyle-git.ts` to fetch workflow YAML files from `.better-github/workflows/`.
+  - Added `POST /api/webhooks/push` endpoint that accepts `{ owner, repo, branch, commitSha }` payload.
+  - Endpoint reads all workflow files from the repo, parses them with `parseWorkflow()`, and uses `shouldTrigger()` to check which workflows should run for the push event.
+  - Each matching workflow creates a workflow run in the database and executes in the background on Freestyle VMs.
+  - Webhook endpoint does not require authentication (similar to GitHub webhooks which use signatures instead).
+  - Added API tests: missing fields returns 400, valid payload returns triggered workflows list, endpoint does not require auth.
+  - All 45 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add webhook endpoint to trigger workflows on push events.
-Automated Verification: POST `/api/webhooks/push` with a push payload triggers the appropriate workflow runs.
+Task: Add webhook signature verification for push events using a shared secret.
+Automated Verification: POST `/api/webhooks/push` without valid HMAC signature returns 401; with valid signature returns 200.
 Browser Verification: N/A (webhook endpoint, no UI).
 
 ## Next Up

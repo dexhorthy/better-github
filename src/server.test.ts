@@ -205,3 +205,51 @@ describe("freestyle seed files", () => {
 		expect(paths).not.toContain("node_modules/freestyle/index.mjs");
 	});
 });
+
+describe("webhook api", () => {
+	test("POST /api/webhooks/push with missing fields returns 400", async () => {
+		const response = await app.request("/api/webhooks/push", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ owner: "dexhorthy" }),
+		});
+		expect(response.status).toBe(400);
+		const body = (await response.json()) as { error: string };
+		expect(body.error).toContain("Missing required fields");
+	});
+
+	test("POST /api/webhooks/push with valid payload returns triggered workflows", async () => {
+		const response = await app.request("/api/webhooks/push", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				owner: "dexhorthy",
+				repo: "better-github",
+				branch: "main",
+				commitSha: "abc1234",
+			}),
+		});
+		expect(response.status).toBe(200);
+		const body = (await response.json()) as {
+			message: string;
+			triggered: { id: string; workflowName: string }[];
+		};
+		expect(body.message).toBeDefined();
+		expect(Array.isArray(body.triggered)).toBe(true);
+	});
+
+	test("POST /api/webhooks/push does not require auth", async () => {
+		const response = await app.request("/api/webhooks/push", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				owner: "dexhorthy",
+				repo: "better-github",
+				branch: "main",
+				commitSha: "def5678",
+			}),
+		});
+		// Should not return 401
+		expect(response.status).not.toBe(401);
+	});
+});

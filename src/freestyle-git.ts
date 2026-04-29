@@ -72,6 +72,50 @@ function makeGitUser(name: string, email: string): GitUser {
 	};
 }
 
+export type WorkflowFile = {
+	name: string;
+	content: string;
+};
+
+export async function fetchWorkflowFiles(
+	repoName: string,
+): Promise<WorkflowFile[]> {
+	try {
+		const repoId = await findFreestyleRepoId(repoName);
+		if (!repoId) return [];
+
+		const repo = freestyle.git.repos.ref({ repoId });
+		const workflowDir = await repo.contents.get({
+			path: ".better-github/workflows",
+		});
+
+		if (workflowDir.type !== "dir") return [];
+
+		const ymlFiles = workflowDir.entries.filter(
+			(e) =>
+				e.type === "file" &&
+				(e.name.endsWith(".yml") || e.name.endsWith(".yaml")),
+		);
+
+		const results: WorkflowFile[] = [];
+		for (const entry of ymlFiles) {
+			const file = await repo.contents.get({
+				path: `.better-github/workflows/${entry.name}`,
+			});
+			if (file.type === "file") {
+				results.push({
+					name: entry.name,
+					content: Buffer.from(file.content, "base64").toString("utf8"),
+				});
+			}
+		}
+
+		return results;
+	} catch {
+		return [];
+	}
+}
+
 export async function fetchFreestyleRepoData(
 	repoName: string,
 	path = "",
