@@ -64,26 +64,33 @@
   - Unit test asserts `ReadmePreview` renders the text inside `data-testid="repo-readme"`.
   - Browser-verified: root path shows file list followed by a README.md section with the repo content; navigating to `?path=src` hides the README section.
 
+- Added Playwright e2e test suite for UI integration tests:
+  - Installed `@playwright/test`, added `playwright.config.ts` with Chromium project and webServer config that auto-starts both the Hono API and Vite dev server.
+  - `bun run test:e2e` runs 4 tests: root page renders file list and README section; clicking `src` shows src files and hides README; clicking `App.tsx` shows the file viewer with line numbers; clicking the repo name resets to root.
+  - Fixed `bun run test` to scope to `src/` so bun test doesn't pick up playwright spec files.
+  - Fixed lint issues caught by Biome: removed non-null assertion in `main.tsx`, replaced `role="region"` with `<section>`, suppressed `noArrayIndexKey` for static file content.
+  - All 26 unit tests and 4 e2e tests pass; biome check is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add playwright test suite for UI integration tests to regular testing flow — install `@playwright/test`, add a `bun run test:e2e` script, and write tests covering: (1) root page renders file list and README section, (2) clicking `src` renders src file entries, (3) clicking `App.tsx` renders the file viewer with line numbers, (4) clicking the repo name resets to root.
-Automated Verification: `bun run test:e2e` runs without failures against a locally running server.
-Browser Verification: N/A (the tests themselves are the browser verification).
+Task: Add authentication — implement sign-up and sign-in with email + password using a local SQLite store (`bun:sqlite`). Expose `/api/auth/register` (POST, email+password → JWT) and `/api/auth/login` (POST → JWT). Add a simple login/register form to the React UI; on success store the JWT in localStorage and send it as `Authorization: Bearer` on API calls. The repository page should require authentication (return 401 if no valid token).
+Automated Verification: new API tests assert register returns a token, login returns a token, and `/api/repos/...` without a token returns 401.
+Browser Verification: navigate to `/`, see login form; fill in email and password, submit, and confirm the repo page loads.
 
 
 ## Next Up
 
+- Add authentication, sign up with email, and current-user state.
+- support for private/public repos and multiple repositories
+
 ## Long Term Goals
 
 - Deploy to the cloud on cloudflare (api key can be used to create other api keys)
-- build a github actions clone on cloudflare workers
-- push and
-- Add a second remote for this repo, and move development to that origin, remove the github remote from this repo
-- Add support for actions matching the github actions yaml spec
+- build a github actions clone on cloudflare workers matching the github actions yaml spec
+- Add a second remote for this repo, and move development to that origin, update PROMPT.md with 5-10 word note to push to both remotes
 - Add repository navigation for Actions (placeholder for now), and Settings.
 - Add file contents view after nested directory browsing exists.
-- Add authentication, sign up with email, and current-user state.
 
 ## Out of scope
 

@@ -1,31 +1,33 @@
 {
-  "name": "better-github",
-  "type": "module",
-  "private": true,
-  "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "api": "bun run src/server.ts",
-    "start": "bun run src/start.ts",
-    "seed:freestyle": "bun run src/seed-freestyle-repo.ts",
-    "build": "vite build",
-    "typecheck": "tsc --noEmit",
-    "lint": "bun run typecheck",
-    "test": "bun test"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "typescript": "^6.0.3"
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "^6.0.1",
-    "freestyle": "^0.1.49",
-    "freestyle-sh": "^0.4.32",
-    "hono": "^4.12.15",
-    "lucide-react": "^1.14.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "vite": "^8.0.10"
-  }
+	"name": "better-github",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "vite --host 127.0.0.1",
+		"api": "bun run src/server.ts",
+		"start": "bun run src/start.ts",
+		"seed:freestyle": "bun run src/seed-freestyle-repo.ts",
+		"build": "vite build",
+		"typecheck": "tsc --noEmit",
+		"lint": "bunx @biomejs/biome check .",
+		"test": "bun test src/",
+		"test:e2e": "bun x --bun playwright test"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.59.1",
+		"@types/bun": "latest",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"typescript": "^6.0.3"
+	},
+	"dependencies": {
+		"@vitejs/plugin-react": "^6.0.1",
+		"freestyle": "^0.1.49",
+		"freestyle-sh": "^0.4.32",
+		"hono": "^4.12.15",
+		"lucide-react": "^1.14.0",
+		"react": "^19.2.5",
+		"react-dom": "^19.2.5",
+		"vite": "^8.0.10"
+	}
 }
