@@ -15,16 +15,17 @@ import {
 	saveWorkflowFile,
 } from "./freestyle-git";
 import { buildRepositoryOverview } from "./repository-overview";
-import type { WorkflowStepResult } from "./types";
 import { verifyWebhookSignature } from "./webhook-signature";
 import { makeD1WorkflowRunRepo } from "./workflow-db-d1";
 import {
+	deriveTerminalStatus,
 	executeWorkflowRun,
 	parseWorkflow,
 	requestCancellation,
 	shouldTrigger,
 	type Workflow,
 	type WorkflowRun,
+	type WorkflowRunResult,
 } from "./workflows";
 
 export { WorkflowBroadcaster } from "./worker-broadcaster-do";
@@ -35,12 +36,7 @@ export type WorkflowExecutor = (
 	branch: string,
 	commitSha: string,
 	runId: string,
-) => Promise<{
-	success: boolean;
-	logs: string;
-	steps: WorkflowStepResult[];
-	cancelled: boolean;
-}>;
+) => Promise<WorkflowRunResult>;
 
 let workflowExecutor: WorkflowExecutor = executeWorkflowRun;
 
@@ -272,16 +268,7 @@ function startWorkflowExecution(
 				commitSha,
 				runId,
 			);
-			const status: WorkflowRun["status"] = result.cancelled
-				? "cancelled"
-				: result.success
-					? "success"
-					: "failure";
-			const conclusion: WorkflowRun["conclusion"] = result.cancelled
-				? "cancelled"
-				: result.success
-					? "success"
-					: "failure";
+			const { status, conclusion } = deriveTerminalStatus(result);
 			await runRepo.update(runId, {
 				status,
 				conclusion,
@@ -484,14 +471,7 @@ app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
 		return c.json({ message: "Repository not found" }, 404);
 	}
 
-	// Set env vars from bindings so freestyle-git.ts can read process.env
-	if (c.env.FREESTYLE_API_KEY) {
-		process.env.FREESTYLE_API_KEY = c.env.FREESTYLE_API_KEY;
-	}
-	if (c.env.FREESTYLE_REPO_ID) {
-		process.env.FREESTYLE_REPO_ID = c.env.FREESTYLE_REPO_ID;
-	}
-
+	bridgeFreestyleEnv(c.env);
 	const liveData = await fetchFreestyleRepoData(repo, path);
 	return c.json(buildRepositoryOverview(fixture, path, liveData));
 });

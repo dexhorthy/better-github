@@ -385,6 +385,13 @@
   - Net deletion: ~45 lines of duplicated row-mapping logic. Single source of truth for translating a `workflow_runs` row into a `WorkflowRun` regardless of runtime.
   - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Extracted shared workflow run lifecycle helpers in `src/workflows.ts`:
+  - Added exported `WorkflowRunResult` type and `deriveTerminalStatus(result)` returning `{ status, conclusion }` (collapses the cancelled/success/failure ternary that was duplicated three times across `server.ts` and `worker.ts`).
+  - `server.ts` gained a `startWorkflowExecution(runId, workflow, branch, commitSha)` helper mirroring `worker.ts`; the `POST /api/repos/:owner/:repo/actions/runs` and `POST /api/webhooks/push` handlers now both call into it instead of duplicating the in-progress → execute → terminal-status update pattern.
+  - `worker.ts` `WorkflowExecutor` now returns the shared `WorkflowRunResult` type; `/api/repos/:owner/:repo` route reuses the existing `bridgeFreestyleEnv()` helper instead of inlining the same `process.env` assignment.
+  - Net deletion: ~50 lines across `server.ts` (-29) and `worker.ts` (-20).
+  - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 ## Next Up
 
 - build a github actions clone on freestyle sandboxes/vms - ONLY the bare minimum to deploy better-github itself w/ wrangler on pushes

@@ -106,18 +106,32 @@ export function shouldTrigger(
 	return trigger.branches.includes(branch);
 }
 
+export type WorkflowRunResult = {
+	success: boolean;
+	logs: string;
+	steps: WorkflowStepResult[];
+	cancelled: boolean;
+};
+
+export function deriveTerminalStatus(result: WorkflowRunResult): {
+	status: "success" | "failure" | "cancelled";
+	conclusion: "success" | "failure" | "cancelled";
+} {
+	const status = result.cancelled
+		? "cancelled"
+		: result.success
+			? "success"
+			: "failure";
+	return { status, conclusion: status };
+}
+
 export async function executeWorkflowRun(
 	workflow: Workflow,
 	repoUrl: string,
 	branch: string,
 	_commitSha: string,
 	runId?: string,
-): Promise<{
-	success: boolean;
-	logs: string;
-	steps: WorkflowStepResult[];
-	cancelled: boolean;
-}> {
+): Promise<WorkflowRunResult> {
 	const logs: string[] = [];
 	const steps: WorkflowStepResult[] = [];
 	let success = true;

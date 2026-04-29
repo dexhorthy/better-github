@@ -19,10 +19,12 @@ import {
 } from "./websocket";
 import { postgresWorkflowRunRepo as runRepo } from "./workflow-db";
 import {
+	deriveTerminalStatus,
 	executeWorkflowRun,
 	parseWorkflow,
 	requestCancellation,
 	shouldTrigger,
+	type Workflow,
 	type WorkflowRun,
 } from "./workflows";
 
@@ -37,6 +39,33 @@ async function updateAndBroadcastRun(
 	if (run) {
 		broadcastRunUpdate(run);
 	}
+}
+
+function startWorkflowExecution(
+	runId: string,
+	workflow: Workflow,
+	branch: string,
+	commitSha: string,
+): void {
+	(async () => {
+		await updateAndBroadcastRun(runId, { status: "in_progress" });
+		const repoUrl = `https://git.freestyle.sh/${process.env.FREESTYLE_REPO_ID}`;
+		const result = await executeWorkflowRun(
+			workflow,
+			repoUrl,
+			branch,
+			commitSha,
+			runId,
+		);
+		const { status, conclusion } = deriveTerminalStatus(result);
+		await updateAndBroadcastRun(runId, {
+			status,
+			conclusion,
+			completedAt: new Date().toISOString(),
+			logs: result.logs,
+			steps: result.steps,
+		});
+	})().catch(console.error);
 }
 
 app.get("/api/health", (c) => c.json({ ok: true }));
@@ -123,36 +152,7 @@ app.post("/api/webhooks/push", async (c) => {
 
 		await runRepo.insert(run);
 		triggered.push({ id: runId, workflowName: workflow.name });
-
-		// Execute in background
-		(async () => {
-			await updateAndBroadcastRun(runId, { status: "in_progress" });
-			const repoUrl = `https://git.freestyle.sh/${process.env.FREESTYLE_REPO_ID}`;
-			const result = await executeWorkflowRun(
-				workflow,
-				repoUrl,
-				branch,
-				commitSha,
-				runId,
-			);
-			const status = result.cancelled
-				? "cancelled"
-				: result.success
-					? "success"
-					: "failure";
-			const conclusion = result.cancelled
-				? "cancelled"
-				: result.success
-					? "success"
-					: "failure";
-			await updateAndBroadcastRun(runId, {
-				status,
-				conclusion,
-				completedAt: new Date().toISOString(),
-				logs: result.logs,
-				steps: result.steps,
-			});
-		})().catch(console.error);
+		startWorkflowExecution(runId, workflow, branch, commitSha);
 	}
 
 	return c.json({ message: "Push event processed", triggered });
@@ -220,36 +220,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	};
 
 	await runRepo.insert(run);
-
-	// Execute in background
-	(async () => {
-		await updateAndBroadcastRun(runId, { status: "in_progress" });
-		const repoUrl = `https://git.freestyle.sh/${process.env.FREESTYLE_REPO_ID}`;
-		const result = await executeWorkflowRun(
-			workflow,
-			repoUrl,
-			branch,
-			commitSha,
-			runId,
-		);
-		const status = result.cancelled
-			? "cancelled"
-			: result.success
-				? "success"
-				: "failure";
-		const conclusion = result.cancelled
-			? "cancelled"
-			: result.success
-				? "success"
-				: "failure";
-		await updateAndBroadcastRun(runId, {
-			status,
-			conclusion,
-			completedAt: new Date().toISOString(),
-			logs: result.logs,
-			steps: result.steps,
-		});
-	})().catch(console.error);
+	startWorkflowExecution(runId, workflow, branch, commitSha);
 
 	return c.json({ id: runId, status: "queued" }, 201);
 });
