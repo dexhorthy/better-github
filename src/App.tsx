@@ -23,6 +23,7 @@ import {
 	LockKeyhole,
 	LogOut,
 	Play,
+	Plus,
 	Search,
 	SkipForward,
 	Star,
@@ -422,6 +423,23 @@ type WorkflowFilesState =
 	| { status: "ready"; files: WorkflowFile[] }
 	| { status: "error"; message: string };
 
+const DEFAULT_WORKFLOW_CONTENT = `name: New Workflow
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: freestyle-vm
+    steps:
+      - name: Checkout
+        uses: checkout
+      - name: Install dependencies
+        run: bun install
+      - name: Run tests
+        run: bun test
+`;
+
 export function WorkflowEditor({
 	auth,
 	owner,
@@ -438,6 +456,9 @@ export function WorkflowEditor({
 	const [editedContent, setEditedContent] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [saveError, setSaveError] = useState<string | null>(null);
+	const [isCreating, setIsCreating] = useState(false);
+	const [newFileName, setNewFileName] = useState("");
+	const [createError, setCreateError] = useState<string | null>(null);
 
 	const loadWorkflows = () => {
 		fetch(
@@ -507,6 +528,70 @@ export function WorkflowEditor({
 		setSelectedFile(fileName);
 		setEditedContent(null);
 		setSaveError(null);
+		setIsCreating(false);
+	};
+
+	const handleStartCreate = () => {
+		setIsCreating(true);
+		setSelectedFile(null);
+		setNewFileName("");
+		setEditedContent(DEFAULT_WORKFLOW_CONTENT);
+		setCreateError(null);
+		setSaveError(null);
+	};
+
+	const handleCancelCreate = () => {
+		setIsCreating(false);
+		setEditedContent(null);
+		setCreateError(null);
+		if (state.status === "ready" && state.files.length > 0) {
+			setSelectedFile(state.files[0].name);
+		}
+	};
+
+	const handleCreate = async () => {
+		if (!newFileName.trim()) {
+			setCreateError("Please enter a file name");
+			return;
+		}
+		if (!editedContent) {
+			setCreateError("Please enter workflow content");
+			return;
+		}
+
+		setSaving(true);
+		setCreateError(null);
+
+		try {
+			const response = await fetch(
+				`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/workflows`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${auth.token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ name: newFileName.trim(), content: editedContent }),
+				},
+			);
+
+			const data = await response.json() as { ok?: boolean; name?: string; error?: string };
+			if (!response.ok) {
+				throw new Error(data.error ?? "Failed to create workflow");
+			}
+
+			setIsCreating(false);
+			setEditedContent(null);
+			setNewFileName("");
+			loadWorkflows();
+			if (data.name) {
+				setSelectedFile(data.name);
+			}
+		} catch (e) {
+			setCreateError(e instanceof Error ? e.message : "Failed to create workflow");
+		} finally {
+			setSaving(false);
+		}
 	};
 
 	return (
@@ -522,6 +607,15 @@ export function WorkflowEditor({
 					Back to runs
 				</button>
 				<h2>Workflow files</h2>
+				<button
+					type="button"
+					className="workflow-create-btn"
+					onClick={handleStartCreate}
+					data-testid="workflow-create-btn"
+				>
+					<Plus size={16} aria-hidden="true" />
+					New workflow
+				</button>
 			</div>
 
 			{state.status === "loading" && (
@@ -537,13 +631,13 @@ export function WorkflowEditor({
 					No workflow files found in .better-github/workflows/
 				</p>
 			)}
-			{state.status === "ready" && state.files.length > 0 && (
+			{(state.status === "ready" && state.files.length > 0) || isCreating ? (
 				<div className="workflow-editor-content">
 					<div className="workflow-file-list" data-testid="workflow-file-list">
-						{state.files.map((file) => (
+						{state.status === "ready" && state.files.map((file) => (
 							<button
 								type="button"
-								className={`workflow-file-item ${selectedFile === file.name ? "selected" : ""}`}
+								className={`workflow-file-item ${selectedFile === file.name && !isCreating ? "selected" : ""}`}
 								key={file.name}
 								onClick={() => handleSelectFile(file.name)}
 								data-testid="workflow-file-item"
@@ -553,7 +647,55 @@ export function WorkflowEditor({
 							</button>
 						))}
 					</div>
-					{selectedWorkflow && (
+					{isCreating ? (
+						<div
+							className="workflow-file-content"
+							data-testid="workflow-create-form"
+						>
+							<div className="workflow-file-header">
+								<FileCode size={16} aria-hidden="true" />
+								<input
+									type="text"
+									className="workflow-name-input"
+									placeholder="workflow-name.yml"
+									value={newFileName}
+									onChange={(e) => setNewFileName(e.target.value)}
+									data-testid="workflow-name-input"
+								/>
+								<div className="workflow-file-actions">
+									<button
+										type="button"
+										className="workflow-cancel-btn"
+										onClick={handleCancelCreate}
+										data-testid="workflow-cancel-btn"
+									>
+										Cancel
+									</button>
+									<button
+										type="button"
+										className="workflow-save-btn"
+										onClick={handleCreate}
+										disabled={saving}
+										data-testid="workflow-create-submit"
+									>
+										{saving ? "Creating..." : "Create"}
+									</button>
+								</div>
+							</div>
+							{createError && (
+								<p className="workflow-save-error" data-testid="workflow-create-error">
+									{createError}
+								</p>
+							)}
+							<textarea
+								className="workflow-textarea"
+								value={editedContent ?? ""}
+								onChange={(e) => setEditedContent(e.target.value)}
+								spellCheck={false}
+								data-testid="workflow-create-textarea"
+							/>
+						</div>
+					) : selectedWorkflow && (
 						<div
 							className="workflow-file-content"
 							data-testid="workflow-file-content"
@@ -593,7 +735,7 @@ export function WorkflowEditor({
 						</div>
 					)}
 				</div>
-			)}
+			) : null}
 		</div>
 	);
 }

@@ -384,4 +384,18 @@ describe("WorkflowEditor", () => {
 
 		expect(html).toContain("Loading workflows...");
 	});
+
+	test("renders new workflow button", () => {
+		const html = renderToStaticMarkup(
+			<WorkflowEditor
+				auth={{ token: "test-token" }}
+				owner="dexhorthy"
+				repo="better-github"
+				onBack={() => {}}
+			/>,
+		);
+
+		expect(html).toContain('data-testid="workflow-create-btn"');
+		expect(html).toContain("New workflow");
+	});
 });

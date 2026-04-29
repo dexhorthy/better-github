@@ -247,6 +247,54 @@ describe("workflows endpoint", () => {
 		);
 		expect(response.status).toBe(401);
 	});
+
+	test("POST workflow returns 400 when name is missing", async () => {
+		const token = await getTestToken();
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ content: "name: Test\non: push\njobs: {}" }),
+			},
+		);
+		expect(response.status).toBe(400);
+		const body = (await response.json()) as { error: string };
+		expect(body.error).toBe("Missing name");
+	});
+
+	test("POST workflow returns 400 when content is missing", async () => {
+		const token = await getTestToken();
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ name: "test.yml" }),
+			},
+		);
+		expect(response.status).toBe(400);
+		const body = (await response.json()) as { error: string };
+		expect(body.error).toBe("Missing content");
+	});
+
+	test("POST workflow requires authentication", async () => {
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows",
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "test.yml", content: "name: CI\non: push\njobs: {}" }),
+			},
+		);
+		expect(response.status).toBe(401);
+	});
 });
 
 describe("freestyle seed files", () => {

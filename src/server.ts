@@ -318,6 +318,34 @@ app.get("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
 	return c.json(workflowFiles);
 });
 
+app.post("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
+	const { repo } = c.req.param();
+	const body = (await c.req.json().catch(() => ({}))) as {
+		name?: string;
+		content?: string;
+	};
+
+	if (!body.name) {
+		return c.json({ error: "Missing name" }, 400);
+	}
+	if (!body.content) {
+		return c.json({ error: "Missing content" }, 400);
+	}
+
+	// Ensure the name ends with .yml or .yaml
+	let fileName = body.name;
+	if (!fileName.endsWith(".yml") && !fileName.endsWith(".yaml")) {
+		fileName = `${fileName}.yml`;
+	}
+
+	const result = await saveWorkflowFile(repo, fileName, body.content);
+	if (!result.ok) {
+		return c.json({ error: result.error }, 500);
+	}
+
+	return c.json({ ok: true, name: fileName }, 201);
+});
+
 app.put("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
 	const { repo, name } = c.req.param();
 	const body = (await c.req.json().catch(() => ({}))) as { content?: string };

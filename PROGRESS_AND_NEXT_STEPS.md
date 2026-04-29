@@ -244,12 +244,23 @@
   - Browser-verified: workflow files list, editable textarea, unsaved indicator appears on edit.
   - All 73 tests pass; biome lint is clean.
 
+- Added workflow file creation (create new workflow files):
+  - Added `POST /api/repos/:owner/:repo/workflows` endpoint that accepts `name` and `content` in request body.
+  - Endpoint auto-appends `.yml` extension if not provided.
+  - Uses existing `saveWorkflowFile` function which calls `repo.contents.upsert()` to create the file.
+  - Updated `WorkflowEditor` component with "New workflow" button in header.
+  - Added create form UI with file name input, textarea with default workflow template, and Create/Cancel buttons.
+  - Added CSS styles for create button, name input, and cancel button.
+  - Added API tests: missing name returns 400, missing content returns 400, requires authentication returns 401.
+  - Added unit test for "New workflow" button rendering.
+  - All 77 tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add workflow file creation (create new workflow files).
-Automated Verification: API test for POST /api/repos/:owner/:repo/workflows endpoint.
-Browser Verification: Users can create a new workflow file with a custom name.
+Task: Add workflow file deletion (delete existing workflow files).
+Automated Verification: API test for DELETE /api/repos/:owner/:repo/workflows/:name endpoint.
+Browser Verification: Users can delete a workflow file from the editor.
 
 ## Next Up
 - Fixed: magic-link email pointed at `/api/auth/verify?token=...` (raw JSON page) instead of `/?token=...` (frontend auto-verify). Updated `sendMagicLinkEmail` in `src/auth-core.ts` to link to the frontend root so the React handler completes the sign-in. TODO: add a regression test asserting the email body contains `${baseUrl}/?token=` and not `/api/auth/verify`.
