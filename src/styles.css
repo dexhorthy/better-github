@@ -99,6 +99,19 @@ input {
   color: #59636e;
 }
 
+.repo-home-link {
+  color: #0969da;
+  text-decoration: none;
+}
+
+.repo-home-link:hover {
+  text-decoration: underline;
+}
+
+.repo-home-link strong {
+  font-weight: 600;
+}
+
 .repo-header p {
   max-width: 760px;
   margin: 10px 0 0;

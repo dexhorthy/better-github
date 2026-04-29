@@ -47,6 +47,23 @@ export function buildPathSearch(path: string): string {
   return trimmed ? `?path=${encodeURIComponent(trimmed)}` : "";
 }
 
+export function RepoHomeLink({ name, onHome }: { name: string; onHome: () => void }) {
+  return (
+    <a
+      className="repo-home-link"
+      data-testid="repo-home-link"
+      href="/"
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onHome();
+      }}
+    >
+      <strong>{name}</strong>
+    </a>
+  );
+}
+
 export function LineNumberedCode({ text }: { text: string }) {
   const lines = text.split("\n");
 
@@ -142,7 +159,7 @@ function App() {
             <BookOpen size={20} aria-hidden="true" />
             <span>{repository.owner}</span>
             <span className="slash">/</span>
-            <strong>{repository.name}</strong>
+            <RepoHomeLink name={repository.name} onHome={() => setPath("")} />
             <span className="visibility">{repository.visibility}</span>
           </div>
           <p>{repository.description}</p>

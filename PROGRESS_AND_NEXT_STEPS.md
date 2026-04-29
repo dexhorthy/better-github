@@ -49,12 +49,18 @@
   - Updated README so the local dev section leads with `bun run start`, with the two-terminal flow as a fallback.
   - Smoke-verified: `bun run start` boots, `GET http://localhost:8787/api/health` returns 200 and `GET http://127.0.0.1:5173/` returns 200.
 
+- Made the repository name in the repo header a clickable link that resets the active path to root:
+  - Extracted `RepoHomeLink` rendering an anchor with `href="/"` and `data-testid="repo-home-link"` so deep links can be unwound without using the browser back button.
+  - Click handler calls `event.preventDefault()` and resets `path` to `""` (which clears the URL query via the existing path → URL effect), but bails out on modifier-key clicks so cmd/ctrl/shift/alt-click preserves default open-in-new-tab navigation.
+  - Added unit tests covering the rendered anchor markup, the plain-click path (preventDefault + onHome called), and modifier-key passthrough (no preventDefault, no onHome).
+  - Browser-verified from `/?path=src/App.tsx`: clicking the `better-github` link in the repo header navigates to `/`, the breadcrumb collapses to just `better-github`, and the root file listing (README.md, src, etc.) renders in place of the file viewer.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add a clickable repository title in the header that links back to the repository root (`/`) so users can return from a deep file path without using the browser back button.
-Automated Verification: Static render test asserting the header repo title is rendered as an anchor with `href="/"` and `data-testid="repo-home-link"`, and a unit test that clicking it resets `path` to the empty string.
-Browser Verification: From `/?path=src/App.tsx`, clicking the repo title in the header navigates to `/` and renders the root file listing with the breadcrumb collapsed back to `better-github`.
+Task: Render a repository README preview below the file list on the root path, fetched from the same `/api/repos/:owner/:repo` endpoint by adding a `readme` field that returns the decoded text of `README.md` when present at the repo root.
+Automated Verification: API test asserting `GET /api/repos/dexhorthy/better-github` returns a `readme.text` string that contains `bun run start`. Unit test for a new `ReadmePreview` component asserting it renders the README text inside an element with `data-testid="repo-readme"` only when readme text is provided.
+Browser Verification: Loading `http://127.0.0.1:5173/` renders the file list followed by a `Readme` section showing the live README content; navigating into `?path=src` no longer renders the README section.
 
 
 ## Next Up
