@@ -255,12 +255,20 @@
   - Added unit test for "New workflow" button rendering.
   - All 77 tests pass; biome lint is clean.
 
+- Added workflow file deletion:
+  - Added `deleteWorkflowFile(repoName, fileName)` function in `freestyle-git.ts` using `repo.contents.delete()` API.
+  - Added `DELETE /api/repos/:owner/:repo/workflows/:name` endpoint in `server.ts` that requires authentication.
+  - Updated `WorkflowEditor` component with delete button and two-step confirmation flow (click Delete → confirm/cancel).
+  - Added CSS styles for delete button, confirm button, and confirmation text.
+  - Added API test asserting DELETE workflow requires authentication.
+  - All 78 tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add workflow file deletion (delete existing workflow files).
-Automated Verification: API test for DELETE /api/repos/:owner/:repo/workflows/:name endpoint.
-Browser Verification: Users can delete a workflow file from the editor.
+Task: Add magic-link email regression test asserting email body contains `${baseUrl}/?token=` not `/api/auth/verify`.
+Automated Verification: Unit test that mocks Resend API and verifies the email body format.
+Browser Verification: N/A (backend test only).
 
 ## Next Up
 - Fixed: magic-link email pointed at `/api/auth/verify?token=...` (raw JSON page) instead of `/?token=...` (frontend auto-verify). Updated `sendMagicLinkEmail` in `src/auth-core.ts` to link to the frontend root so the React handler completes the sign-in. TODO: add a regression test asserting the email body contains `${baseUrl}/?token=` and not `/api/auth/verify`.

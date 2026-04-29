@@ -10,7 +10,7 @@ import {
 	repositories,
 } from "./data";
 import type { FreestyleRepoData } from "./freestyle-git";
-import { fetchFreestyleRepoData, fetchWorkflowFiles, saveWorkflowFile } from "./freestyle-git";
+import { deleteWorkflowFile, fetchFreestyleRepoData, fetchWorkflowFiles, saveWorkflowFile } from "./freestyle-git";
 import type { RepositoryOverview } from "./types";
 import { verifyWebhookSignature } from "./webhook-signature";
 import {
@@ -355,6 +355,17 @@ app.put("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
 	}
 
 	const result = await saveWorkflowFile(repo, name, body.content);
+	if (!result.ok) {
+		return c.json({ error: result.error }, 500);
+	}
+
+	return c.json({ ok: true });
+});
+
+app.delete("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
+	const { repo, name } = c.req.param();
+
+	const result = await deleteWorkflowFile(repo, name);
 	if (!result.ok) {
 		return c.json({ error: result.error }, 500);
 	}

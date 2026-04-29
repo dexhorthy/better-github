@@ -101,6 +101,28 @@ export async function saveWorkflowFile(
 	}
 }
 
+export async function deleteWorkflowFile(
+	repoName: string,
+	fileName: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	try {
+		const repoId = await findFreestyleRepoId(repoName);
+		if (!repoId) return { ok: false, error: "Repository not found" };
+
+		const repo = freestyle.git.repos.ref({ repoId });
+		const path = `.better-github/workflows/${fileName}`;
+
+		await repo.contents.delete({
+			path,
+			message: `Delete ${fileName}`,
+		});
+
+		return { ok: true };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+	}
+}
+
 export async function fetchWorkflowFiles(
 	repoName: string,
 ): Promise<WorkflowFile[]> {

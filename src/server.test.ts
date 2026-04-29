@@ -295,6 +295,16 @@ describe("workflows endpoint", () => {
 		);
 		expect(response.status).toBe(401);
 	});
+
+	test("DELETE workflow requires authentication", async () => {
+		const response = await app.request(
+			"/api/repos/dexhorthy/better-github/workflows/ci.yml",
+			{
+				method: "DELETE",
+			},
+		);
+		expect(response.status).toBe(401);
+	});
 });
 
 describe("freestyle seed files", () => {

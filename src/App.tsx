@@ -28,6 +28,7 @@ import {
 	SkipForward,
 	Star,
 	StopCircle,
+	Trash2,
 	XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -459,6 +460,9 @@ export function WorkflowEditor({
 	const [isCreating, setIsCreating] = useState(false);
 	const [newFileName, setNewFileName] = useState("");
 	const [createError, setCreateError] = useState<string | null>(null);
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [deleting, setDeleting] = useState(false);
+	const [deleteError, setDeleteError] = useState<string | null>(null);
 
 	const loadWorkflows = () => {
 		fetch(
@@ -529,6 +533,39 @@ export function WorkflowEditor({
 		setEditedContent(null);
 		setSaveError(null);
 		setIsCreating(false);
+		setConfirmingDelete(false);
+		setDeleteError(null);
+	};
+
+	const handleDelete = async () => {
+		if (!selectedFile) return;
+		setDeleting(true);
+		setDeleteError(null);
+
+		try {
+			const response = await fetch(
+				`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/workflows/${encodeURIComponent(selectedFile)}`,
+				{
+					method: "DELETE",
+					headers: {
+						Authorization: `Bearer ${auth.token}`,
+					},
+				},
+			);
+
+			if (!response.ok) {
+				const data = await response.json().catch(() => ({}));
+				throw new Error((data as { error?: string }).error ?? "Failed to delete");
+			}
+
+			setSelectedFile(null);
+			setConfirmingDelete(false);
+			loadWorkflows();
+		} catch (e) {
+			setDeleteError(e instanceof Error ? e.message : "Failed to delete");
+		} finally {
+			setDeleting(false);
+		}
 	};
 
 	const handleStartCreate = () => {
@@ -709,17 +746,57 @@ export function WorkflowEditor({
 									</span>
 								)}
 								<div className="workflow-file-actions">
-									<button
-										type="button"
-										className="workflow-save-btn"
-										onClick={handleSave}
-										disabled={!hasChanges || saving}
-										data-testid="workflow-save-btn"
-									>
-										{saving ? "Saving..." : "Save"}
-									</button>
+									{confirmingDelete ? (
+										<>
+											<span className="workflow-delete-confirm-text">Delete this workflow?</span>
+											<button
+												type="button"
+												className="workflow-cancel-btn"
+												onClick={() => setConfirmingDelete(false)}
+												disabled={deleting}
+												data-testid="workflow-delete-cancel"
+											>
+												Cancel
+											</button>
+											<button
+												type="button"
+												className="workflow-delete-confirm-btn"
+												onClick={handleDelete}
+												disabled={deleting}
+												data-testid="workflow-delete-confirm"
+											>
+												{deleting ? "Deleting..." : "Confirm Delete"}
+											</button>
+										</>
+									) : (
+										<>
+											<button
+												type="button"
+												className="workflow-delete-btn"
+												onClick={() => setConfirmingDelete(true)}
+												data-testid="workflow-delete-btn"
+											>
+												<Trash2 size={16} aria-hidden="true" />
+												Delete
+											</button>
+											<button
+												type="button"
+												className="workflow-save-btn"
+												onClick={handleSave}
+												disabled={!hasChanges || saving}
+												data-testid="workflow-save-btn"
+											>
+												{saving ? "Saving..." : "Save"}
+											</button>
+										</>
+									)}
 								</div>
 							</div>
+							{deleteError && (
+								<p className="workflow-save-error" data-testid="workflow-delete-error">
+									{deleteError}
+								</p>
+							)}
 							{saveError && (
 								<p className="workflow-save-error" data-testid="workflow-save-error">
 									{saveError}
