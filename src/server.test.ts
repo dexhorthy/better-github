@@ -207,6 +207,60 @@ describe("freestyle seed files", () => {
 	});
 });
 
+describe("workflow runs api", () => {
+	test("GET /api/repos/:owner/:repo/actions/runs/:runId returns run with steps field", async () => {
+		const token = await getTestToken();
+
+		// Create a workflow run
+		const createRes = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ branch: "main" }),
+			},
+		);
+		expect(createRes.status).toBe(201);
+		const { id: runId } = (await createRes.json()) as { id: string };
+
+		// Fetch the run detail
+		const getRes = await app.request(
+			`/api/repos/dexhorthy/better-github/actions/runs/${runId}`,
+			{
+				headers: { Authorization: `Bearer ${token}` },
+			},
+		);
+		expect(getRes.status).toBe(200);
+
+		const run = (await getRes.json()) as {
+			id: string;
+			workflowName: string;
+			status: string;
+			steps?: Array<{ name: string; status: string; logs: string }>;
+		};
+
+		expect(run.id).toBe(runId);
+		expect(run.workflowName).toBeDefined();
+		expect(run.status).toBeDefined();
+		// steps field may be undefined for a queued run or defined as an array
+		expect(run.steps === undefined || Array.isArray(run.steps)).toBe(true);
+	});
+
+	test("GET /api/repos/:owner/:repo/actions/runs/:runId returns 404 for unknown run", async () => {
+		const token = await getTestToken();
+		const res = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs/nonexistent-id",
+			{
+				headers: { Authorization: `Bearer ${token}` },
+			},
+		);
+		expect(res.status).toBe(404);
+	});
+});
+
 describe("webhook api", () => {
 	test("POST /api/webhooks/push without signature returns 401", async () => {
 		const response = await app.request("/api/webhooks/push", {

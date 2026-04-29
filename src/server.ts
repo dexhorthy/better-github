@@ -12,6 +12,7 @@ import {
 import type { FreestyleRepoData } from "./freestyle-git";
 import { fetchFreestyleRepoData, fetchWorkflowFiles } from "./freestyle-git";
 import type { RepositoryOverview } from "./types";
+import { verifyWebhookSignature } from "./webhook-signature";
 import {
 	getWorkflowRun,
 	insertWorkflowRun,
@@ -24,7 +25,6 @@ import {
 	shouldTrigger,
 	type WorkflowRun,
 } from "./workflows";
-import { verifyWebhookSignature } from "./webhook-signature";
 
 export const app = new Hono();
 
@@ -156,6 +156,7 @@ app.post("/api/webhooks/push", async (c) => {
 				conclusion: result.success ? "success" : "failure",
 				completedAt: new Date().toISOString(),
 				logs: result.logs,
+				steps: result.steps,
 			});
 		})().catch(console.error);
 	}
@@ -230,6 +231,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 			conclusion: result.success ? "success" : "failure",
 			completedAt: new Date().toISOString(),
 			logs: result.logs,
+			steps: result.steps,
 		});
 	})().catch(console.error);
 

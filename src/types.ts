@@ -65,6 +65,14 @@ export type RepositoryOverview = {
 	readme?: { text: string };
 };
 
+export type WorkflowStepResult = {
+	name: string;
+	status: "pending" | "running" | "success" | "failure" | "skipped";
+	startedAt?: string;
+	completedAt?: string;
+	logs: string;
+};
+
 export type WorkflowRun = {
 	id: string;
 	workflowName: string;
@@ -77,4 +85,5 @@ export type WorkflowRun = {
 	startedAt: string;
 	completedAt?: string;
 	logs?: string;
+	steps?: WorkflowStepResult[];
 };

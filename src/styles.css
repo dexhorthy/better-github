@@ -949,3 +949,196 @@ input {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
+
+/* Run Item as button */
+button.run-item {
+	width: 100%;
+	text-align: left;
+	cursor: pointer;
+}
+
+/* Run Detail View */
+.run-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+.run-detail-header {
+	margin-bottom: 4px;
+}
+
+.run-detail-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	font-size: 14px;
+	color: #0969da;
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.run-detail-back:hover {
+	background: #f3f4f6;
+}
+
+.run-detail-title {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.run-detail-title h2 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.run-detail-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	font-size: 14px;
+	color: #59636e;
+}
+
+/* Steps List */
+.run-steps h3 {
+	margin: 0 0 12px;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.run-steps-empty {
+	color: #59636e;
+	font-size: 14px;
+}
+
+.steps-list {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid #d0d7de;
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.step-item {
+	border-bottom: 1px solid #d0d7de;
+}
+
+.step-item:last-child {
+	border-bottom: none;
+}
+
+.step-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	padding: 12px 16px;
+	font-size: 14px;
+	text-align: left;
+	color: inherit;
+	background: #f6f8fa;
+	border: none;
+	cursor: pointer;
+}
+
+.step-header:hover:not(:disabled) {
+	background: #eef1f4;
+}
+
+.step-header:disabled {
+	cursor: default;
+}
+
+.step-chevron-placeholder {
+	width: 16px;
+	height: 16px;
+}
+
+.step-name {
+	flex: 1;
+	font-weight: 500;
+}
+
+.step-status-text {
+	font-size: 12px;
+	color: #59636e;
+	text-transform: capitalize;
+}
+
+.step-logs {
+	margin: 0;
+	padding: 16px;
+	font-family:
+		ui-monospace,
+		SFMono-Regular,
+		SF Mono,
+		Menlo,
+		Consolas,
+		Liberation Mono,
+		monospace;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #e6edf3;
+	background: #161b22;
+	white-space: pre-wrap;
+	word-break: break-all;
+	overflow-x: auto;
+}
+
+/* Step status icons */
+.step-status-pending {
+	color: #59636e;
+}
+
+.step-status-running {
+	color: #9a6700;
+	animation: spin 1s linear infinite;
+}
+
+.step-status-success {
+	color: #1a7f37;
+}
+
+.step-status-failure {
+	color: #cf222e;
+}
+
+.step-status-skipped {
+	color: #59636e;
+}
+
+/* Full logs */
+.run-full-logs h3 {
+	margin: 0 0 12px;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.run-logs-content {
+	margin: 0;
+	padding: 16px;
+	font-family:
+		ui-monospace,
+		SFMono-Regular,
+		SF Mono,
+		Menlo,
+		Consolas,
+		Liberation Mono,
+		monospace;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #e6edf3;
+	background: #161b22;
+	border-radius: 6px;
+	white-space: pre-wrap;
+	word-break: break-all;
+	overflow-x: auto;
+	max-height: 400px;
+	overflow-y: auto;
+}

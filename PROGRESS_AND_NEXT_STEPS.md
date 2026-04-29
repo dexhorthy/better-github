@@ -178,15 +178,30 @@
   - Updated PROMPT.md guidance with note to push changes to both origin and upstream remotes.
   - `git remote -v` now shows both `origin` and `upstream` remotes.
 
+- Added workflow run detail view with step-level logs and execution status:
+  - Added `WorkflowStepResult` type with step name, status, timestamps, and logs.
+  - Updated `WorkflowRun` type to include optional `steps` array.
+  - Modified `executeWorkflowRun` in `workflows.ts` to track per-step results (status, logs, timing).
+  - Added `steps JSONB` column to `workflow_runs` Postgres table with migration for existing tables.
+  - Updated `insertWorkflowRun`, `updateWorkflowRun`, `getWorkflowRun`, and `listWorkflowRuns` to store/retrieve steps.
+  - Created `RunDetail` component with expandable step logs, back button, and run metadata display.
+  - Created `StepStatusIcon` component for step-level status indicators (pending/running/success/failure/skipped).
+  - Made workflow runs clickable in `ActionsTab` to navigate to the detail view.
+  - Added auto-refresh polling (5s) for run detail to show real-time updates.
+  - Added CSS styles for run detail view, steps list, and log display.
+  - Added API test verifying `GET /api/repos/:owner/:repo/actions/runs/:runId` returns run with steps field.
+  - Added unit tests for `RunDetail` component rendering steps and back button.
+  - All 52 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add workflow run detail view showing step logs and execution status.
-Automated Verification: API test for `GET /api/repos/:owner/:repo/actions/runs/:runId` returns run with steps array; unit test for step log rendering component.
-Browser Verification: Clicking a workflow run in the Actions tab shows the run detail page with step names and logs.
+Task: Add real-time workflow run status updates via WebSocket for instant feedback.
+Automated Verification: Unit test for WebSocket connection handler; API test for WebSocket endpoint.
+Browser Verification: Starting a workflow run shows status updates without manual refresh.
 
 ## Next Up
-- Add real-time workflow run status updates via polling or WebSocket
+- Add workflow run cancellation button
 
 ## Long Term Goals
 

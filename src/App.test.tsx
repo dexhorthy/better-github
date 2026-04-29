@@ -7,8 +7,10 @@ import {
 	ReadmePreview,
 	RepoBreadcrumb,
 	RepoHomeLink,
+	RunDetail,
 	readPathFromSearch,
 } from "./App";
+import type { WorkflowRun } from "./types";
 
 describe("RepoBreadcrumb", () => {
 	test("renders a link to / with data-testid=repo-breadcrumb-home and owner text", () => {
@@ -215,5 +217,79 @@ describe("buildPathSearch", () => {
 		expect(readPathFromSearch(buildPathSearch("src/App.tsx"))).toBe(
 			"src/App.tsx",
 		);
+	});
+});
+
+describe("RunDetail", () => {
+	test("renders run detail with steps", () => {
+		const run: WorkflowRun = {
+			id: "test-run-123",
+			workflowName: "CI",
+			repoOwner: "dexhorthy",
+			repoName: "better-github",
+			branch: "main",
+			commitSha: "abc1234567890",
+			status: "success",
+			startedAt: "2024-01-01T10:00:00Z",
+			completedAt: "2024-01-01T10:05:00Z",
+			steps: [
+				{ name: "Checkout", status: "success", logs: "Cloning repo..." },
+				{ name: "Install", status: "success", logs: "Installing deps..." },
+				{ name: "Test", status: "success", logs: "All tests passed!" },
+			],
+		};
+
+		const html = renderToStaticMarkup(
+			<RunDetail run={run} onBack={() => {}} />,
+		);
+
+		expect(html).toContain('data-testid="run-detail"');
+		expect(html).toContain('data-testid="run-steps"');
+		expect(html).toContain('data-testid="step-item"');
+		expect(html).toContain("CI");
+		expect(html).toContain("Checkout");
+		expect(html).toContain("Install");
+		expect(html).toContain("Test");
+		expect(html).toContain("abc1234");
+	});
+
+	test("renders back button with data-testid", () => {
+		const run: WorkflowRun = {
+			id: "test-run-456",
+			workflowName: "Build",
+			repoOwner: "dexhorthy",
+			repoName: "better-github",
+			branch: "feature",
+			commitSha: "def5678",
+			status: "queued",
+			startedAt: "2024-01-01T10:00:00Z",
+		};
+
+		const html = renderToStaticMarkup(
+			<RunDetail run={run} onBack={() => {}} />,
+		);
+
+		expect(html).toContain('data-testid="run-detail-back"');
+		expect(html).toContain("All workflow runs");
+	});
+
+	test("renders empty steps message when no steps available", () => {
+		const run: WorkflowRun = {
+			id: "test-run-789",
+			workflowName: "Deploy",
+			repoOwner: "dexhorthy",
+			repoName: "better-github",
+			branch: "main",
+			commitSha: "ghi9012",
+			status: "queued",
+			startedAt: "2024-01-01T10:00:00Z",
+			steps: [],
+		};
+
+		const html = renderToStaticMarkup(
+			<RunDetail run={run} onBack={() => {}} />,
+		);
+
+		expect(html).toContain("No step details available yet");
 	});
 });

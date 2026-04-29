@@ -1,5 +1,6 @@
 import { freestyle, VmBaseImage, VmSpec } from "freestyle";
 import yaml from "js-yaml";
+import type { WorkflowStepResult } from "./types";
 
 export type WorkflowStep = {
 	name: string;
@@ -34,6 +35,7 @@ export type WorkflowRun = {
 	startedAt: string;
 	completedAt?: string;
 	logs?: string;
+	steps?: WorkflowStepResult[];
 };
 
 type WorkflowYaml = {
@@ -95,8 +97,9 @@ export async function executeWorkflowRun(
 	repoUrl: string,
 	branch: string,
 	_commitSha: string,
-): Promise<{ success: boolean; logs: string }> {
+): Promise<{ success: boolean; logs: string; steps: WorkflowStepResult[] }> {
 	const logs: string[] = [];
+	const steps: WorkflowStepResult[] = [];
 	let success = true;
 
 	for (const [_jobId, job] of Object.entries(workflow.jobs)) {
@@ -117,34 +120,74 @@ export async function executeWorkflowRun(
 			logs.push(`VM created: ${vmId}`);
 
 			try {
+				let shouldSkipRemaining = false;
 				for (const step of job.steps) {
+					const stepResult: WorkflowStepResult = {
+						name: step.name,
+						status: shouldSkipRemaining ? "skipped" : "running",
+						startedAt: shouldSkipRemaining
+							? undefined
+							: new Date().toISOString(),
+						logs: "",
+					};
+
+					if (shouldSkipRemaining) {
+						steps.push(stepResult);
+						continue;
+					}
+
 					logs.push(`\n--- Step: ${step.name} ---`);
+					const stepLogs: string[] = [];
 
 					if (step.uses === "checkout") {
 						const cloneResult = await vm.exec({
 							command: `git clone --depth 1 --branch ${branch} ${repoUrl} /app`,
 							timeoutMs: 120000,
 						});
+						stepLogs.push(cloneResult.stdout || "");
 						logs.push(cloneResult.stdout || "");
 						if (cloneResult.exitCode !== 0) {
+							stepLogs.push(`Checkout failed: ${cloneResult.stderr}`);
 							logs.push(`Checkout failed: ${cloneResult.stderr}`);
+							stepResult.status = "failure";
+							stepResult.completedAt = new Date().toISOString();
+							stepResult.logs = stepLogs.join("\n");
+							steps.push(stepResult);
 							success = false;
-							break;
+							shouldSkipRemaining = true;
+							continue;
 						}
+						stepResult.status = "success";
 					} else if (step.run) {
 						const result = await vm.exec({
 							command: step.run,
 							timeoutMs: 300000,
 						});
+						stepLogs.push(result.stdout || "");
 						logs.push(result.stdout || "");
 						if (result.exitCode !== 0) {
+							stepLogs.push(
+								`Step failed (exit ${result.exitCode}): ${result.stderr}`,
+							);
 							logs.push(
 								`Step failed (exit ${result.exitCode}): ${result.stderr}`,
 							);
+							stepResult.status = "failure";
+							stepResult.completedAt = new Date().toISOString();
+							stepResult.logs = stepLogs.join("\n");
+							steps.push(stepResult);
 							success = false;
-							break;
+							shouldSkipRemaining = true;
+							continue;
 						}
+						stepResult.status = "success";
+					} else {
+						stepResult.status = "success";
 					}
+
+					stepResult.completedAt = new Date().toISOString();
+					stepResult.logs = stepLogs.join("\n");
+					steps.push(stepResult);
 				}
 			} finally {
 				await vm.stop().catch(() => {});
@@ -160,5 +203,5 @@ export async function executeWorkflowRun(
 		if (!success) break;
 	}
 
-	return { success, logs: logs.join("\n") };
+	return { success, logs: logs.join("\n"), steps };
 }

@@ -1,7 +1,10 @@
 import {
+	ArrowLeft,
 	BookOpen,
 	Bot,
 	CheckCircle2,
+	ChevronDown,
+	ChevronRight,
 	CircleDot,
 	Clock,
 	Code2,
@@ -19,11 +22,17 @@ import {
 	LogOut,
 	Play,
 	Search,
+	SkipForward,
 	Star,
 	XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { GitRepository, RepositoryOverview, WorkflowRun } from "./types";
+import type {
+	GitRepository,
+	RepositoryOverview,
+	WorkflowRun,
+	WorkflowStepResult,
+} from "./types";
 import "./styles.css";
 
 type LoadState =
@@ -436,6 +445,162 @@ function RunStatusIcon({ status }: { status: WorkflowRun["status"] }) {
 	}
 }
 
+function StepStatusIcon({ status }: { status: WorkflowStepResult["status"] }) {
+	switch (status) {
+		case "pending":
+			return (
+				<Clock size={16} className="step-status-pending" aria-label="Pending" />
+			);
+		case "running":
+			return (
+				<Loader2
+					size={16}
+					className="step-status-running"
+					aria-label="Running"
+				/>
+			);
+		case "success":
+			return (
+				<CheckCircle2
+					size={16}
+					className="step-status-success"
+					aria-label="Success"
+				/>
+			);
+		case "failure":
+			return (
+				<XCircle
+					size={16}
+					className="step-status-failure"
+					aria-label="Failure"
+				/>
+			);
+		case "skipped":
+			return (
+				<SkipForward
+					size={16}
+					className="step-status-skipped"
+					aria-label="Skipped"
+				/>
+			);
+	}
+}
+
+export function RunDetail({
+	run,
+	onBack,
+}: {
+	run: WorkflowRun;
+	onBack: () => void;
+}) {
+	const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+
+	const toggleStep = (stepName: string) => {
+		setExpandedSteps((prev) => {
+			const next = new Set(prev);
+			if (next.has(stepName)) {
+				next.delete(stepName);
+			} else {
+				next.add(stepName);
+			}
+			return next;
+		});
+	};
+
+	const steps = run.steps ?? [];
+
+	return (
+		<div className="run-detail" data-testid="run-detail">
+			<div className="run-detail-header">
+				<button
+					type="button"
+					className="run-detail-back"
+					onClick={onBack}
+					data-testid="run-detail-back"
+				>
+					<ArrowLeft size={16} aria-hidden="true" />
+					All workflow runs
+				</button>
+			</div>
+			<div className="run-detail-title">
+				<RunStatusIcon status={run.status} />
+				<h2>{run.workflowName}</h2>
+				<span className="run-status-badge" data-status={run.status}>
+					{run.status === "in_progress" ? "In progress" : run.status}
+				</span>
+			</div>
+			<div className="run-detail-meta">
+				<span>{run.branch}</span>
+				<span>·</span>
+				<span>{run.commitSha.slice(0, 7)}</span>
+				<span>·</span>
+				<span>Started {timeAgo(run.startedAt)}</span>
+				{run.completedAt && (
+					<>
+						<span>·</span>
+						<span>Completed {timeAgo(run.completedAt)}</span>
+					</>
+				)}
+			</div>
+
+			<div className="run-steps" data-testid="run-steps">
+				<h3>Steps</h3>
+				{steps.length === 0 ? (
+					<p className="run-steps-empty">No step details available yet.</p>
+				) : (
+					<div className="steps-list">
+						{steps.map((step) => {
+							const isExpanded = expandedSteps.has(step.name);
+							const hasLogs = step.logs && step.logs.trim().length > 0;
+							return (
+								<div
+									className="step-item"
+									key={step.name}
+									data-testid="step-item"
+								>
+									<button
+										type="button"
+										className="step-header"
+										onClick={() => hasLogs && toggleStep(step.name)}
+										disabled={!hasLogs}
+									>
+										{hasLogs ? (
+											isExpanded ? (
+												<ChevronDown size={16} aria-hidden="true" />
+											) : (
+												<ChevronRight size={16} aria-hidden="true" />
+											)
+										) : (
+											<span className="step-chevron-placeholder" />
+										)}
+										<StepStatusIcon status={step.status} />
+										<span className="step-name">{step.name}</span>
+										<span className="step-status-text">{step.status}</span>
+									</button>
+									{isExpanded && hasLogs && (
+										<pre className="step-logs" data-testid="step-logs">
+											{step.logs}
+										</pre>
+									)}
+								</div>
+							);
+						})}
+					</div>
+				)}
+			</div>
+
+			{run.logs && (
+				<div className="run-full-logs">
+					<h3>Full logs</h3>
+					<pre className="run-logs-content" data-testid="run-logs">
+						{run.logs}
+					</pre>
+				</div>
+			)}
+		</div>
+	);
+}
+
 export function ActionsTab({
 	auth,
 	owner,
@@ -449,6 +614,8 @@ export function ActionsTab({
 }) {
 	const [state, setState] = useState<WorkflowRunsState>({ status: "loading" });
 	const [triggering, setTriggering] = useState(false);
+	const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+	const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
 
 	const fetchRuns = useCallback(() => {
 		fetch(
@@ -469,11 +636,43 @@ export function ActionsTab({
 			.catch((e: Error) => setState({ status: "error", message: e.message }));
 	}, [auth.token, owner, repo, onSignOut]);
 
+	const fetchRunDetail = useCallback(
+		(runId: string) => {
+			fetch(
+				`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}`,
+				{
+					headers: { Authorization: `Bearer ${auth.token}` },
+				},
+			)
+				.then((r) => {
+					if (r.status === 401) {
+						onSignOut();
+						throw new Error("Session expired");
+					}
+					if (!r.ok) throw new Error("Could not load run details");
+					return r.json() as Promise<WorkflowRun>;
+				})
+				.then((run) => setSelectedRun(run))
+				.catch(() => {});
+		},
+		[auth.token, owner, repo, onSignOut],
+	);
+
 	useEffect(() => {
 		fetchRuns();
 		const interval = setInterval(fetchRuns, 5000);
 		return () => clearInterval(interval);
 	}, [fetchRuns]);
+
+	useEffect(() => {
+		if (!selectedRunId) {
+			setSelectedRun(null);
+			return;
+		}
+		fetchRunDetail(selectedRunId);
+		const interval = setInterval(() => fetchRunDetail(selectedRunId), 5000);
+		return () => clearInterval(interval);
+	}, [selectedRunId, fetchRunDetail]);
 
 	const triggerRun = async () => {
 		setTriggering(true);
@@ -496,6 +695,14 @@ export function ActionsTab({
 			setTriggering(false);
 		}
 	};
+
+	if (selectedRun) {
+		return (
+			<section className="actions-tab" data-testid="actions-tab">
+				<RunDetail run={selectedRun} onBack={() => setSelectedRunId(null)} />
+			</section>
+		);
+	}
 
 	return (
 		<section className="actions-tab" data-testid="actions-tab">
@@ -525,7 +732,13 @@ export function ActionsTab({
 			{state.status === "ready" && state.runs.length > 0 && (
 				<div className="runs-list" data-testid="runs-list">
 					{state.runs.map((run) => (
-						<article className="run-item" key={run.id} data-testid="run-item">
+						<button
+							type="button"
+							className="run-item"
+							key={run.id}
+							data-testid="run-item"
+							onClick={() => setSelectedRunId(run.id)}
+						>
 							<RunStatusIcon status={run.status} />
 							<div className="run-info">
 								<strong>{run.workflowName}</strong>
@@ -537,7 +750,7 @@ export function ActionsTab({
 							<span className="run-status-badge" data-status={run.status}>
 								{run.status === "in_progress" ? "In progress" : run.status}
 							</span>
-						</article>
+						</button>
 					))}
 				</div>
 			)}
