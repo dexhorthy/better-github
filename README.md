@@ -41,18 +41,18 @@ The first run creates the Freestyle repo and prints its id; export that as
 
 ## Run the app locally
 
-In two terminals:
+Boot the API and the Vite dev server with one command:
 
 ```bash
-# terminal 1 — Hono API on http://localhost:8787
-bun run api
-
-# terminal 2 — Vite dev server on http://127.0.0.1:5173
-bun run dev
+bun run start
 ```
 
-Open `http://127.0.0.1:5173/` to see the repository overview. The Vite dev
-server proxies `/api/*` requests to the Hono API at port 8787.
+This launches the Hono API on `http://localhost:8787` and the Vite dev server
+on `http://127.0.0.1:5173`. The Vite dev server proxies `/api/*` requests to
+the Hono API at port 8787.
+
+Prefer two terminals? You can still run them separately with `bun run api` and
+`bun run dev`.
 
 ## Tests and type checking
 

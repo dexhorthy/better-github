@@ -43,13 +43,18 @@
 - Rewrote `README.md` to document the local dev workflow: prerequisites, `.env` setup with `FREESTYLE_API_KEY` and `FREESTYLE_REPO_ID`, `bun run seed:freestyle`, and the two-terminal `bun run api` + `bun run dev` flow.
   - Added `src/readme.test.ts` asserting the README mentions `bun run dev`, `bun run api`, `bun run seed:freestyle`, both Freestyle env vars, and the `127.0.0.1:5173` dev URL.
   - Smoke-tested `bun run api` boots and `GET /api/health` returns `{ok:true}` per the README instructions.
+- Added a single `bun run start` command that boots both the Hono API and Vite dev server:
+  - `src/start.ts` spawns `bun run src/server.ts` and `bun x vite --host 127.0.0.1` with shared stdio, forwards SIGINT/SIGTERM to both children, and exits when either child dies.
+  - Added `src/start.test.ts` asserting `package.json` declares a `start` script and that `src/start.ts` references both `src/server.ts` and `vite`.
+  - Updated README so the local dev section leads with `bun run start`, with the two-terminal flow as a fallback.
+  - Smoke-verified: `bun run start` boots, `GET http://localhost:8787/api/health` returns 200 and `GET http://127.0.0.1:5173/` returns 200.
 
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add a single `bun run start` script that boots both the Hono API and the Vite dev server in parallel so the README's two-terminal step collapses to one command.
-Automated Verification: Add a test that reads `package.json` and asserts a `start` script exists and references both `vite` and `src/server.ts` (or invokes `dev` and `api` concurrently).
-Browser Verification: Running `bun run start` from a fresh clone starts the API on :8787 and the UI on :5173, and the repo overview renders without manually launching a second process.
+Task: Add a clickable repository title in the header that links back to the repository root (`/`) so users can return from a deep file path without using the browser back button.
+Automated Verification: Static render test asserting the header repo title is rendered as an anchor with `href="/"` and `data-testid="repo-home-link"`, and a unit test that clicking it resets `path` to the empty string.
+Browser Verification: From `/?path=src/App.tsx`, clicking the repo title in the header navigates to `/` and renders the root file listing with the breadcrumb collapsed back to `better-github`.
 
 
 ## Next Up
