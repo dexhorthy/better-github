@@ -58,8 +58,8 @@ export type Route =
 
 export function parseRoute(pathname: string): Route {
 	const parts = pathname.split("/").filter(Boolean);
-	if (parts.length >= 2)
-		return { page: "repo", owner: parts[0], repo: parts[1] };
+	const [owner, repo] = parts;
+	if (owner && repo) return { page: "repo", owner, repo };
 	return { page: "repos" };
 }
 
@@ -464,7 +464,7 @@ export function WorkflowEditor({
 	const [deleting, setDeleting] = useState(false);
 	const [deleteError, setDeleteError] = useState<string | null>(null);
 
-	const loadWorkflows = () => {
+	const loadWorkflows = useCallback(() => {
 		fetch(
 			`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/workflows`,
 			{
@@ -478,15 +478,15 @@ export function WorkflowEditor({
 			.then((files) => {
 				setState({ status: "ready", files });
 				if (files.length > 0 && !selectedFile) {
-					setSelectedFile(files[0].name);
+					setSelectedFile(files[0]?.name ?? null);
 				}
 			})
 			.catch((e: Error) => setState({ status: "error", message: e.message }));
-	};
+	}, [auth.token, owner, repo, selectedFile]);
 
 	useEffect(() => {
 		loadWorkflows();
-	}, [auth.token, owner, repo]);
+	}, [loadWorkflows]);
 
 	const selectedWorkflow =
 		state.status === "ready"
@@ -494,7 +494,8 @@ export function WorkflowEditor({
 			: null;
 
 	const currentContent = editedContent ?? selectedWorkflow?.content ?? "";
-	const hasChanges = editedContent !== null && editedContent !== selectedWorkflow?.content;
+	const hasChanges =
+		editedContent !== null && editedContent !== selectedWorkflow?.content;
 
 	const handleSave = async () => {
 		if (!selectedFile || !editedContent) return;
@@ -555,7 +556,9 @@ export function WorkflowEditor({
 
 			if (!response.ok) {
 				const data = await response.json().catch(() => ({}));
-				throw new Error((data as { error?: string }).error ?? "Failed to delete");
+				throw new Error(
+					(data as { error?: string }).error ?? "Failed to delete",
+				);
 			}
 
 			setSelectedFile(null);
@@ -582,7 +585,7 @@ export function WorkflowEditor({
 		setEditedContent(null);
 		setCreateError(null);
 		if (state.status === "ready" && state.files.length > 0) {
-			setSelectedFile(state.files[0].name);
+			setSelectedFile(state.files[0]?.name ?? null);
 		}
 	};
 
@@ -608,11 +611,18 @@ export function WorkflowEditor({
 						Authorization: `Bearer ${auth.token}`,
 						"Content-Type": "application/json",
 					},
-					body: JSON.stringify({ name: newFileName.trim(), content: editedContent }),
+					body: JSON.stringify({
+						name: newFileName.trim(),
+						content: editedContent,
+					}),
 				},
 			);
 
-			const data = await response.json() as { ok?: boolean; name?: string; error?: string };
+			const data = (await response.json()) as {
+				ok?: boolean;
+				name?: string;
+				error?: string;
+			};
 			if (!response.ok) {
 				throw new Error(data.error ?? "Failed to create workflow");
 			}
@@ -625,7 +635,9 @@ export function WorkflowEditor({
 				setSelectedFile(data.name);
 			}
 		} catch (e) {
-			setCreateError(e instanceof Error ? e.message : "Failed to create workflow");
+			setCreateError(
+				e instanceof Error ? e.message : "Failed to create workflow",
+			);
 		} finally {
 			setSaving(false);
 		}
@@ -671,18 +683,19 @@ export function WorkflowEditor({
 			{(state.status === "ready" && state.files.length > 0) || isCreating ? (
 				<div className="workflow-editor-content">
 					<div className="workflow-file-list" data-testid="workflow-file-list">
-						{state.status === "ready" && state.files.map((file) => (
-							<button
-								type="button"
-								className={`workflow-file-item ${selectedFile === file.name && !isCreating ? "selected" : ""}`}
-								key={file.name}
-								onClick={() => handleSelectFile(file.name)}
-								data-testid="workflow-file-item"
-							>
-								<FileCode size={16} aria-hidden="true" />
-								{file.name}
-							</button>
-						))}
+						{state.status === "ready" &&
+							state.files.map((file) => (
+								<button
+									type="button"
+									className={`workflow-file-item ${selectedFile === file.name && !isCreating ? "selected" : ""}`}
+									key={file.name}
+									onClick={() => handleSelectFile(file.name)}
+									data-testid="workflow-file-item"
+								>
+									<FileCode size={16} aria-hidden="true" />
+									{file.name}
+								</button>
+							))}
 					</div>
 					{isCreating ? (
 						<div
@@ -720,7 +733,10 @@ export function WorkflowEditor({
 								</div>
 							</div>
 							{createError && (
-								<p className="workflow-save-error" data-testid="workflow-create-error">
+								<p
+									className="workflow-save-error"
+									data-testid="workflow-create-error"
+								>
 									{createError}
 								</p>
 							)}
@@ -732,84 +748,97 @@ export function WorkflowEditor({
 								data-testid="workflow-create-textarea"
 							/>
 						</div>
-					) : selectedWorkflow && (
-						<div
-							className="workflow-file-content"
-							data-testid="workflow-file-content"
-						>
-							<div className="workflow-file-header">
-								<FileCode size={16} aria-hidden="true" />
-								<strong>{selectedWorkflow.name}</strong>
-								{hasChanges && (
-									<span className="workflow-unsaved-indicator" data-testid="workflow-unsaved">
-										(unsaved)
-									</span>
-								)}
-								<div className="workflow-file-actions">
-									{confirmingDelete ? (
-										<>
-											<span className="workflow-delete-confirm-text">Delete this workflow?</span>
-											<button
-												type="button"
-												className="workflow-cancel-btn"
-												onClick={() => setConfirmingDelete(false)}
-												disabled={deleting}
-												data-testid="workflow-delete-cancel"
-											>
-												Cancel
-											</button>
-											<button
-												type="button"
-												className="workflow-delete-confirm-btn"
-												onClick={handleDelete}
-												disabled={deleting}
-												data-testid="workflow-delete-confirm"
-											>
-												{deleting ? "Deleting..." : "Confirm Delete"}
-											</button>
-										</>
-									) : (
-										<>
-											<button
-												type="button"
-												className="workflow-delete-btn"
-												onClick={() => setConfirmingDelete(true)}
-												data-testid="workflow-delete-btn"
-											>
-												<Trash2 size={16} aria-hidden="true" />
-												Delete
-											</button>
-											<button
-												type="button"
-												className="workflow-save-btn"
-												onClick={handleSave}
-												disabled={!hasChanges || saving}
-												data-testid="workflow-save-btn"
-											>
-												{saving ? "Saving..." : "Save"}
-											</button>
-										</>
+					) : (
+						selectedWorkflow && (
+							<div
+								className="workflow-file-content"
+								data-testid="workflow-file-content"
+							>
+								<div className="workflow-file-header">
+									<FileCode size={16} aria-hidden="true" />
+									<strong>{selectedWorkflow.name}</strong>
+									{hasChanges && (
+										<span
+											className="workflow-unsaved-indicator"
+											data-testid="workflow-unsaved"
+										>
+											(unsaved)
+										</span>
 									)}
+									<div className="workflow-file-actions">
+										{confirmingDelete ? (
+											<>
+												<span className="workflow-delete-confirm-text">
+													Delete this workflow?
+												</span>
+												<button
+													type="button"
+													className="workflow-cancel-btn"
+													onClick={() => setConfirmingDelete(false)}
+													disabled={deleting}
+													data-testid="workflow-delete-cancel"
+												>
+													Cancel
+												</button>
+												<button
+													type="button"
+													className="workflow-delete-confirm-btn"
+													onClick={handleDelete}
+													disabled={deleting}
+													data-testid="workflow-delete-confirm"
+												>
+													{deleting ? "Deleting..." : "Confirm Delete"}
+												</button>
+											</>
+										) : (
+											<>
+												<button
+													type="button"
+													className="workflow-delete-btn"
+													onClick={() => setConfirmingDelete(true)}
+													data-testid="workflow-delete-btn"
+												>
+													<Trash2 size={16} aria-hidden="true" />
+													Delete
+												</button>
+												<button
+													type="button"
+													className="workflow-save-btn"
+													onClick={handleSave}
+													disabled={!hasChanges || saving}
+													data-testid="workflow-save-btn"
+												>
+													{saving ? "Saving..." : "Save"}
+												</button>
+											</>
+										)}
+									</div>
 								</div>
+								{deleteError && (
+									<p
+										className="workflow-save-error"
+										data-testid="workflow-delete-error"
+									>
+										{deleteError}
+									</p>
+								)}
+								{saveError && (
+									<p
+										className="workflow-save-error"
+										data-testid="workflow-save-error"
+									>
+										{saveError}
+									</p>
+								)}
+								<textarea
+									className="workflow-textarea"
+									value={currentContent}
+									onChange={(e) => setEditedContent(e.target.value)}
+									spellCheck={false}
+									data-testid="workflow-textarea"
+								/>
 							</div>
-							{deleteError && (
-								<p className="workflow-save-error" data-testid="workflow-delete-error">
-									{deleteError}
-								</p>
-							)}
-							{saveError && (
-								<p className="workflow-save-error" data-testid="workflow-save-error">
-									{saveError}
-								</p>
-							)}
-							<textarea
-								className="workflow-textarea"
-								value={currentContent}
-								onChange={(e) => setEditedContent(e.target.value)}
-								spellCheck={false}
-								data-testid="workflow-textarea"
-							/>
-						</div>
+						)
 					)}
 				</div>
 			) : null}

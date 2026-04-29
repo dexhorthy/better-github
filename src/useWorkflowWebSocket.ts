@@ -11,7 +11,9 @@ export function useWorkflowWebSocket(
 	subscribedRunId?: string,
 ) {
 	const wsRef = useRef<WebSocket | null>(null);
-	const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+	const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
 
 	const connect = useCallback(() => {
 		if (typeof window === "undefined") return;

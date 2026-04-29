@@ -10,6 +10,16 @@ const sql = new SQL(DATABASE_URL);
 
 let initialized = false;
 
+function parseSteps(
+	steps: WorkflowStepResult[] | string | null,
+): WorkflowStepResult[] | undefined {
+	if (!steps) return undefined;
+	if (typeof steps !== "string") return steps;
+
+	const parsed = JSON.parse(steps) as unknown;
+	return Array.isArray(parsed) ? (parsed as WorkflowStepResult[]) : undefined;
+}
+
 export async function ensureWorkflowRunsTable(): Promise<void> {
 	if (initialized) return;
 	await sql`
@@ -84,7 +94,7 @@ export async function getWorkflowRun(id: string): Promise<WorkflowRun | null> {
 			started_at: string;
 			completed_at: string | null;
 			logs: string | null;
-			steps: WorkflowStepResult[] | null;
+			steps: WorkflowStepResult[] | string | null;
 		}[]
 	>`SELECT * FROM workflow_runs WHERE id = ${id}`;
 
@@ -103,7 +113,7 @@ export async function getWorkflowRun(id: string): Promise<WorkflowRun | null> {
 		startedAt: row.started_at,
 		completedAt: row.completed_at ?? undefined,
 		logs: row.logs ?? undefined,
-		steps: row.steps ?? undefined,
+		steps: parseSteps(row.steps),
 	};
 }
 
@@ -126,7 +136,7 @@ export async function listWorkflowRuns(
 			started_at: string;
 			completed_at: string | null;
 			logs: string | null;
-			steps: WorkflowStepResult[] | null;
+			steps: WorkflowStepResult[] | string | null;
 		}[]
 	>`SELECT * FROM workflow_runs WHERE repo_owner = ${repoOwner} AND repo_name = ${repoName} ORDER BY started_at DESC LIMIT ${limit}`;
 
@@ -142,6 +152,6 @@ export async function listWorkflowRuns(
 		startedAt: row.started_at,
 		completedAt: row.completed_at ?? undefined,
 		logs: row.logs ?? undefined,
-		steps: row.steps ?? undefined,
+		steps: parseSteps(row.steps),
 	}));
 }

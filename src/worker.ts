@@ -3,16 +3,9 @@ import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import type { AuthDB, MagicLinkResult, VerifyResult } from "./auth-core";
 import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth-core";
-import {
-	branches,
-	commits,
-	getFixtureFilesForPath,
-	pullRequests,
-	repositories,
-} from "./data";
-import type { FreestyleRepoData } from "./freestyle-git";
+import { repositories } from "./data";
 import { fetchFreestyleRepoData } from "./freestyle-git";
-import type { RepositoryOverview } from "./types";
+import { buildRepositoryOverview } from "./repository-overview";
 
 type Env = {
 	DB: D1Database;
@@ -100,34 +93,6 @@ function makeD1Db(db: D1Database): AuthDB {
 				.first<{ id: number }>();
 			return row !== null;
 		},
-	};
-}
-
-function buildRepositoryOverview(
-	fixture: (typeof repositories)[number],
-	path: string,
-	liveData: FreestyleRepoData | null,
-): RepositoryOverview {
-	return {
-		repository: liveData
-			? {
-					...fixture,
-					defaultBranch: liveData.repository.defaultBranch,
-					visibility: liveData.repository.visibility,
-					updatedAt: liveData.repository.updatedAt,
-				}
-			: fixture,
-		branches: liveData?.branches.length ? liveData.branches : branches,
-		commits: liveData?.commits.length ? liveData.commits : commits,
-		pullRequests,
-		path,
-		files: liveData?.fileContent
-			? []
-			: liveData?.files.length
-				? liveData.files
-				: getFixtureFilesForPath(path),
-		fileContent: liveData?.fileContent,
-		readme: liveData?.readme,
 	};
 }
 

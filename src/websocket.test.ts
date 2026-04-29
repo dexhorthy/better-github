@@ -104,16 +104,18 @@ describe("WebSocket handlers", () => {
 			commitSha: "abc123",
 			status: "in_progress",
 			startedAt: new Date().toISOString(),
-			steps: [{ name: "Build", status: "running" }],
+			steps: [{ name: "Build", status: "running", logs: "" }],
 		};
 
 		broadcastRunUpdate(run);
 
 		expect(ws.sentMessages.length).toBe(1);
-		const message = JSON.parse(ws.sentMessages[0]);
+		const message = JSON.parse(ws.sentMessages[0] ?? "");
 		expect(message.type).toBe("run_update");
 		expect(message.run.id).toBe("run-456");
-		expect(message.run.steps).toEqual([{ name: "Build", status: "running" }]);
+		expect(message.run.steps).toEqual([
+			{ name: "Build", status: "running", logs: "" },
+		]);
 
 		handleClose(ws);
 	});
@@ -138,7 +140,7 @@ describe("WebSocket handlers", () => {
 		broadcastRunUpdate(run);
 
 		expect(ws.sentMessages.length).toBe(1);
-		const message = JSON.parse(ws.sentMessages[0]);
+		const message = JSON.parse(ws.sentMessages[0] ?? "");
 		expect(message.type).toBe("run_update");
 		expect(message.run.id).toBe("run-789");
 		expect(message.run.steps).toBeUndefined();

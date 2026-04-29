@@ -181,7 +181,7 @@ export async function executeWorkflowRun(
 						});
 						stepLogs.push(cloneResult.stdout || "");
 						logs.push(cloneResult.stdout || "");
-						if (cloneResult.exitCode !== 0) {
+						if (cloneResult.statusCode !== 0) {
 							stepLogs.push(`Checkout failed: ${cloneResult.stderr}`);
 							logs.push(`Checkout failed: ${cloneResult.stderr}`);
 							stepResult.status = "failure";
@@ -200,12 +200,12 @@ export async function executeWorkflowRun(
 						});
 						stepLogs.push(result.stdout || "");
 						logs.push(result.stdout || "");
-						if (result.exitCode !== 0) {
+						if (result.statusCode !== 0) {
 							stepLogs.push(
-								`Step failed (exit ${result.exitCode}): ${result.stderr}`,
+								`Step failed (exit ${result.statusCode}): ${result.stderr}`,
 							);
 							logs.push(
-								`Step failed (exit ${result.exitCode}): ${result.stderr}`,
+								`Step failed (exit ${result.statusCode}): ${result.stderr}`,
 							);
 							stepResult.status = "failure";
 							stepResult.completedAt = new Date().toISOString();

@@ -29,10 +29,14 @@ function base64url(data: Uint8Array): string {
 		.replace(/=+$/, "");
 }
 
-function base64urlDecode(s: string): Uint8Array {
+function base64urlDecode(s: string): Uint8Array<ArrayBuffer> {
 	const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
 	const binary = atob(b64);
-	return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+	const bytes = new Uint8Array(binary.length);
+	for (let index = 0; index < binary.length; index++) {
+		bytes[index] = binary.charCodeAt(index);
+	}
+	return bytes;
 }
 
 export async function signJwt(
@@ -70,6 +74,7 @@ export async function verifyJwt(
 	const parts = token.split(".");
 	if (parts.length !== 3) return null;
 	const [header, body, signature] = parts;
+	if (!header || !body || !signature) return null;
 	const signingInput = `${header}.${body}`;
 	const key = await crypto.subtle.importKey(
 		"raw",

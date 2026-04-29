@@ -290,7 +290,10 @@ describe("workflows endpoint", () => {
 			{
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: "test.yml", content: "name: CI\non: push\njobs: {}" }),
+				body: JSON.stringify({
+					name: "test.yml",
+					content: "name: CI\non: push\njobs: {}",
+				}),
 			},
 		);
 		expect(response.status).toBe(401);
@@ -494,6 +497,83 @@ describe("workflow runs api", () => {
 		expect(res.status).toBe(404);
 		const body = (await res.json()) as { error: string };
 		expect(body.error).toBe("Original run not found");
+	});
+
+	test("completed run includes logs and steps in detail response", async () => {
+		const token = await getTestToken();
+
+		// Create a simple workflow that will complete quickly (failure is expected since no VM)
+		const simpleWorkflow = `name: Quick Test
+on:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: freestyle-vm
+    steps:
+      - name: Hello
+        run: echo "Hello"`;
+
+		const createRes = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					branch: "main",
+					workflowContent: simpleWorkflow,
+				}),
+			},
+		);
+		expect(createRes.status).toBe(201);
+		const { id: runId } = (await createRes.json()) as { id: string };
+
+		// Poll until the run completes (success, failure, or cancelled)
+		let run: {
+			id: string;
+			status: string;
+			logs?: string;
+			steps?: Array<{ name: string; status: string; logs: string }>;
+		} | null = null;
+		const maxAttempts = 30;
+		const pollInterval = 1000;
+
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			const getRes = await app.request(
+				`/api/repos/dexhorthy/better-github/actions/runs/${runId}`,
+				{
+					headers: { Authorization: `Bearer ${token}` },
+				},
+			);
+			expect(getRes.status).toBe(200);
+			run = await getRes.json();
+
+			if (
+				run &&
+				(run.status === "success" ||
+					run.status === "failure" ||
+					run.status === "cancelled")
+			) {
+				break;
+			}
+
+			await new Promise((resolve) => setTimeout(resolve, pollInterval));
+		}
+
+		expect(run).not.toBeNull();
+		if (!run) throw new Error("Expected completed workflow run");
+		expect(["success", "failure", "cancelled"]).toContain(run.status);
+
+		// Verify logs are present after completion
+		expect(run.logs).toBeDefined();
+		expect(typeof run.logs).toBe("string");
+		expect(run.logs?.length).toBeGreaterThan(0);
+
+		// Verify steps are present after completion (may be an empty array if workflow failed early)
+		expect(run.steps === undefined || Array.isArray(run.steps)).toBe(true);
 	});
 });
 

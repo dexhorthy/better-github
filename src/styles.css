@@ -1400,7 +1400,14 @@ button.run-item {
 	width: 100%;
 	min-height: 400px;
 	padding: 12px 16px;
-	font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+	font-family:
+		ui-monospace,
+		SFMono-Regular,
+		SF Mono,
+		Menlo,
+		Consolas,
+		Liberation Mono,
+		monospace;
 	font-size: 13px;
 	line-height: 1.5;
 	color: #1f2328;
@@ -1436,7 +1443,14 @@ button.run-item {
 	flex: 1;
 	padding: 4px 10px;
 	font-size: 14px;
-	font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+	font-family:
+		ui-monospace,
+		SFMono-Regular,
+		SF Mono,
+		Menlo,
+		Consolas,
+		Liberation Mono,
+		monospace;
 	color: #1f2328;
 	background: #fff;
 	border: 1px solid #d0d7de;

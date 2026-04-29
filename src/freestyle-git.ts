@@ -89,7 +89,14 @@ export async function saveWorkflowFile(
 		const repo = freestyle.git.repos.ref({ repoId });
 		const path = `.better-github/workflows/${fileName}`;
 
-		await repo.contents.upsert({
+		const contents = repo.contents as typeof repo.contents & {
+			upsert(input: {
+				path: string;
+				content: string;
+				message: string;
+			}): Promise<unknown>;
+		};
+		await contents.upsert({
 			path,
 			content: Buffer.from(content).toString("base64"),
 			message: `Update ${fileName}`,
@@ -97,7 +104,10 @@ export async function saveWorkflowFile(
 
 		return { ok: true };
 	} catch (e) {
-		return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+		return {
+			ok: false,
+			error: e instanceof Error ? e.message : "Unknown error",
+		};
 	}
 }
 
@@ -112,14 +122,20 @@ export async function deleteWorkflowFile(
 		const repo = freestyle.git.repos.ref({ repoId });
 		const path = `.better-github/workflows/${fileName}`;
 
-		await repo.contents.delete({
+		const contents = repo.contents as typeof repo.contents & {
+			delete(input: { path: string; message: string }): Promise<unknown>;
+		};
+		await contents.delete({
 			path,
 			message: `Delete ${fileName}`,
 		});
 
 		return { ok: true };
 	} catch (e) {
-		return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+		return {
+			ok: false,
+			error: e instanceof Error ? e.message : "Unknown error",
+		};
 	}
 }
 

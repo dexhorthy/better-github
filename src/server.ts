@@ -2,16 +2,14 @@ import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth";
+import { repositories } from "./data";
 import {
-	branches,
-	commits,
-	getFixtureFilesForPath,
-	pullRequests,
-	repositories,
-} from "./data";
-import type { FreestyleRepoData } from "./freestyle-git";
-import { deleteWorkflowFile, fetchFreestyleRepoData, fetchWorkflowFiles, saveWorkflowFile } from "./freestyle-git";
-import type { RepositoryOverview } from "./types";
+	deleteWorkflowFile,
+	fetchFreestyleRepoData,
+	fetchWorkflowFiles,
+	saveWorkflowFile,
+} from "./freestyle-git";
+import { buildRepositoryOverview } from "./repository-overview";
 import { verifyWebhookSignature } from "./webhook-signature";
 import {
 	broadcastRunUpdate,
@@ -44,34 +42,6 @@ async function updateAndBroadcastRun(
 	if (run) {
 		broadcastRunUpdate(run);
 	}
-}
-
-function buildRepositoryOverview(
-	fixture: (typeof repositories)[number],
-	path: string,
-	liveData: FreestyleRepoData | null,
-): RepositoryOverview {
-	return {
-		repository: liveData
-			? {
-					...fixture,
-					defaultBranch: liveData.repository.defaultBranch,
-					visibility: liveData.repository.visibility,
-					updatedAt: liveData.repository.updatedAt,
-				}
-			: fixture,
-		branches: liveData?.branches.length ? liveData.branches : branches,
-		commits: liveData?.commits.length ? liveData.commits : commits,
-		pullRequests,
-		path,
-		files: liveData?.fileContent
-			? []
-			: liveData?.files.length
-				? liveData.files
-				: getFixtureFilesForPath(path),
-		fileContent: liveData?.fileContent,
-		readme: liveData?.readme,
-	};
 }
 
 app.get("/api/health", (c) => c.json({ ok: true }));
@@ -362,16 +332,20 @@ app.put("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
 	return c.json({ ok: true });
 });
 
-app.delete("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
-	const { repo, name } = c.req.param();
+app.delete(
+	"/api/repos/:owner/:repo/workflows/:name",
+	requireAuth,
+	async (c) => {
+		const { repo, name } = c.req.param();
 
-	const result = await deleteWorkflowFile(repo, name);
-	if (!result.ok) {
-		return c.json({ error: result.error }, 500);
-	}
+		const result = await deleteWorkflowFile(repo, name);
+		if (!result.ok) {
+			return c.json({ error: result.error }, 500);
+		}
 
-	return c.json({ ok: true });
-});
+		return c.json({ ok: true });
+	},
+);
 
 // Less specific route comes after more specific /actions/runs routes
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
