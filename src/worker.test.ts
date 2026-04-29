@@ -1,0 +1,173 @@
+import { expect, test } from "bun:test";
+import type { D1Database } from "@cloudflare/workers-types";
+import { signJwt } from "./auth-core";
+import {
+	getWorkflowRunD1,
+	listWorkflowRunsD1,
+	app as workerApp,
+} from "./worker";
+
+type Row = Record<string, unknown>;
+
+function makeFakeD1(rows: Row[]): D1Database {
+	const matchOwnerRepo = (owner: string, repo: string, limit: number): Row[] =>
+		rows
+			.filter((r) => r.repo_owner === owner && r.repo_name === repo)
+			.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))
+			.slice(0, limit);
+
+	const prepare = (sql: string) => {
+		let bound: unknown[] = [];
+		const stmt = {
+			bind(...args: unknown[]) {
+				bound = args;
+				return stmt;
+			},
+			async all<T = Row>() {
+				if (sql.includes("WHERE repo_owner = ? AND repo_name = ?")) {
+					const [owner, repo, limit] = bound as [string, string, number];
+					return {
+						results: matchOwnerRepo(owner, repo, limit) as T[],
+						success: true,
+						meta: {},
+					};
+				}
+				return { results: [] as T[], success: true, meta: {} };
+			},
+			async first<T = Row>() {
+				if (sql.includes("WHERE id = ?")) {
+					const [id] = bound as [string];
+					const found = rows.find((r) => r.id === id);
+					return (found as T) ?? null;
+				}
+				return null;
+			},
+			async run() {
+				return { success: true, meta: {} };
+			},
+		};
+		return stmt;
+	};
+
+	return { prepare } as unknown as D1Database;
+}
+
+test("listWorkflowRunsD1 maps rows to WorkflowRun shape", async () => {
+	const db = makeFakeD1([
+		{
+			id: "run-1",
+			workflow_name: "CI",
+			repo_owner: "dexhorthy",
+			repo_name: "better-github",
+			branch: "main",
+			commit_sha: "abc",
+			status: "success",
+			conclusion: "success",
+			started_at: "2026-01-01T00:00:00Z",
+			completed_at: "2026-01-01T00:01:00Z",
+			logs: "ok",
+			steps: JSON.stringify([
+				{ name: "Test", status: "success", logs: "step ok" },
+			]),
+		},
+	]);
+	const runs = await listWorkflowRunsD1(db, "dexhorthy", "better-github");
+	expect(runs).toHaveLength(1);
+	const first = runs[0];
+	if (!first) throw new Error("expected first run");
+	expect(first.id).toBe("run-1");
+	expect(first.workflowName).toBe("CI");
+	expect(first.steps?.[0]?.logs).toBe("step ok");
+});
+
+test("getWorkflowRunD1 returns null for missing id", async () => {
+	const db = makeFakeD1([]);
+	const run = await getWorkflowRunD1(db, "missing");
+	expect(run).toBeNull();
+});
+
+test("GET /api/repos/:owner/:repo/actions/runs returns persisted runs from D1", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const db = makeFakeD1([
+		{
+			id: "run-a",
+			workflow_name: "CI",
+			repo_owner: "dexhorthy",
+			repo_name: "better-github",
+			branch: "main",
+			commit_sha: "abc",
+			status: "success",
+			conclusion: "success",
+			started_at: "2026-01-02T00:00:00Z",
+			completed_at: null,
+			logs: null,
+			steps: null,
+		},
+		{
+			id: "run-b",
+			workflow_name: "Deploy",
+			repo_owner: "dexhorthy",
+			repo_name: "better-github",
+			branch: "main",
+			commit_sha: "def",
+			status: "in_progress",
+			conclusion: null,
+			started_at: "2026-01-03T00:00:00Z",
+			completed_at: null,
+			logs: null,
+			steps: null,
+		},
+		{
+			id: "run-other",
+			workflow_name: "CI",
+			repo_owner: "dexhorthy",
+			repo_name: "hello-world",
+			branch: "main",
+			commit_sha: "xyz",
+			status: "success",
+			conclusion: "success",
+			started_at: "2026-01-04T00:00:00Z",
+			completed_at: null,
+			logs: null,
+			steps: null,
+		},
+	]);
+
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/actions/runs",
+			{ headers: { Authorization: `Bearer ${token}` } },
+		),
+		{ DB: db, JWT_SECRET: jwtSecret },
+	);
+	expect(res.status).toBe(200);
+	const body = (await res.json()) as { id: string }[];
+	expect(body).toHaveLength(2);
+	expect(body.map((r) => r.id).sort()).toEqual(["run-a", "run-b"]);
+});
+
+test("GET actions/runs requires auth", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/actions/runs",
+		),
+		{ DB: db, JWT_SECRET: "test-secret" },
+	);
+	expect(res.status).toBe(401);
+});
+
+test("GET actions/runs/:runId returns 404 for unknown run", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/actions/runs/missing",
+			{ headers: { Authorization: `Bearer ${token}` } },
+		),
+		{ DB: db, JWT_SECRET: jwtSecret },
+	);
+	expect(res.status).toBe(404);
+});

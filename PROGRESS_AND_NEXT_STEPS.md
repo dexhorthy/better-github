@@ -278,12 +278,19 @@
   - Browser-verified run detail shows persisted full logs and expandable step logs.
   - All 83 unit tests pass; typecheck and Biome lint are clean; all 4 Playwright e2e tests pass.
 
+- Added D1-backed Actions API routes to `src/worker.ts`:
+  - Added `listWorkflowRunsD1(db, owner, repo, limit)` and `getWorkflowRunD1(db, runId)` helpers that query the existing `workflow_runs` D1 table and map rows into the `WorkflowRun` shape (parses JSON-encoded `steps`, including legacy double-encoded payloads).
+  - Wired `GET /api/repos/:owner/:repo/actions/runs` and `GET /api/repos/:owner/:repo/actions/runs/:runId` Hono routes in `worker.ts` behind `requireAuth`, both reading from the D1 binding.
+  - Exported `app` (alongside the default `{ fetch }`) so worker tests can call `app.fetch(req, env)` with a fake D1 binding.
+  - Added `src/worker.test.ts` with a fake-D1 stub asserting: helper maps rows correctly (incl. step logs), missing id returns null, authed `GET /actions/runs` returns persisted runs filtered by `repo_owner`/`repo_name`, unauthed returns 401, and unknown `:runId` returns 404.
+  - All 88 unit tests pass; biome check and typecheck are clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add D1-backed Actions API routes to `src/worker.ts` for deployed workflow run listing/detail.
-Automated Verification: Worker-level test or integration test that authenticated `GET /api/repos/:owner/:repo/actions/runs` returns persisted runs from D1.
-Browser Verification: Verify the deployed/local Worker build can open the Actions tab and load workflow runs.
+Task: Add D1-backed Actions write routes to `src/worker.ts` (POST trigger run, POST cancel) so deployed Worker can also create and cancel workflow runs, not just read them.
+Automated Verification: Worker-level test asserting authenticated `POST /api/repos/:owner/:repo/actions/runs` inserts a row into the D1-backed runs store and returns 201 with a run id.
+Browser Verification: On deployed Worker, click "Run workflow" in the Actions tab and verify a new run appears in the list.
 
 ## Next Up
 

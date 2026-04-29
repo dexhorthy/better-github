@@ -6,6 +6,8 @@ import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth-core";
 import { repositories } from "./data";
 import { fetchFreestyleRepoData } from "./freestyle-git";
 import { buildRepositoryOverview } from "./repository-overview";
+import type { WorkflowStepResult } from "./types";
+import type { WorkflowRun } from "./workflows";
 
 type Env = {
 	DB: D1Database;
@@ -96,7 +98,7 @@ function makeD1Db(db: D1Database): AuthDB {
 	};
 }
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+export const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
@@ -143,6 +145,96 @@ const requireAuth: MiddlewareHandler<{
 
 app.get("/api/repos", requireAuth, (c) => {
 	return c.json(repositories);
+});
+
+type WorkflowRunRow = {
+	id: string;
+	workflow_name: string;
+	repo_owner: string;
+	repo_name: string;
+	branch: string;
+	commit_sha: string;
+	status: string;
+	conclusion: string | null;
+	started_at: string;
+	completed_at: string | null;
+	logs: string | null;
+	steps: string | null;
+};
+
+function parseStepsField(
+	steps: string | null,
+): WorkflowStepResult[] | undefined {
+	if (!steps) return undefined;
+	try {
+		const parsed = JSON.parse(steps) as unknown;
+		if (typeof parsed === "string") return parseStepsField(parsed);
+		return Array.isArray(parsed) ? (parsed as WorkflowStepResult[]) : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function rowToRun(row: WorkflowRunRow): WorkflowRun {
+	return {
+		id: row.id,
+		workflowName: row.workflow_name,
+		repoOwner: row.repo_owner,
+		repoName: row.repo_name,
+		branch: row.branch,
+		commitSha: row.commit_sha,
+		status: row.status as WorkflowRun["status"],
+		conclusion: (row.conclusion ?? undefined) as WorkflowRun["conclusion"],
+		startedAt: row.started_at,
+		completedAt: row.completed_at ?? undefined,
+		logs: row.logs ?? undefined,
+		steps: parseStepsField(row.steps),
+	};
+}
+
+export async function listWorkflowRunsD1(
+	db: D1Database,
+	owner: string,
+	repo: string,
+	limit = 20,
+): Promise<WorkflowRun[]> {
+	const result = await db
+		.prepare(
+			"SELECT * FROM workflow_runs WHERE repo_owner = ? AND repo_name = ? ORDER BY started_at DESC LIMIT ?",
+		)
+		.bind(owner, repo, limit)
+		.all<WorkflowRunRow>();
+	const rows = result.results ?? [];
+	return rows.map(rowToRun);
+}
+
+export async function getWorkflowRunD1(
+	db: D1Database,
+	runId: string,
+): Promise<WorkflowRun | null> {
+	const row = await db
+		.prepare("SELECT * FROM workflow_runs WHERE id = ?")
+		.bind(runId)
+		.first<WorkflowRunRow>();
+	if (!row) return null;
+	return rowToRun(row);
+}
+
+app.get(
+	"/api/repos/:owner/:repo/actions/runs/:runId",
+	requireAuth,
+	async (c) => {
+		const { runId } = c.req.param();
+		const run = await getWorkflowRunD1(c.env.DB, runId);
+		if (!run) return c.json({ message: "Run not found" }, 404);
+		return c.json(run);
+	},
+);
+
+app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
+	const { owner, repo } = c.req.param();
+	const runs = await listWorkflowRunsD1(c.env.DB, owner, repo);
+	return c.json(runs);
 });
 
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
