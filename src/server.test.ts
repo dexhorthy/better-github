@@ -3,6 +3,7 @@ import { _hasPendingToken, _insertTestToken } from "./auth";
 import { collectTrackedTextFiles } from "./seed-freestyle-repo";
 import { app } from "./server";
 import type { RepositoryOverview } from "./types";
+import { computeWebhookSignature } from "./webhook-signature";
 
 async function getTestToken(): Promise<string> {
 	const email = `test-${Date.now()}@example.com`;
@@ -207,27 +208,63 @@ describe("freestyle seed files", () => {
 });
 
 describe("webhook api", () => {
-	test("POST /api/webhooks/push with missing fields returns 400", async () => {
+	test("POST /api/webhooks/push without signature returns 401", async () => {
 		const response = await app.request("/api/webhooks/push", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ owner: "dexhorthy" }),
+		});
+		expect(response.status).toBe(401);
+		const body = (await response.json()) as { error: string };
+		expect(body.error).toContain("Invalid webhook signature");
+	});
+
+	test("POST /api/webhooks/push with invalid signature returns 401", async () => {
+		const payload = JSON.stringify({ owner: "dexhorthy" });
+		const response = await app.request("/api/webhooks/push", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Hub-Signature-256": "sha256=invalid",
+			},
+			body: payload,
+		});
+		expect(response.status).toBe(401);
+		const body = (await response.json()) as { error: string };
+		expect(body.error).toContain("Invalid webhook signature");
+	});
+
+	test("POST /api/webhooks/push with missing fields returns 400", async () => {
+		const payload = JSON.stringify({ owner: "dexhorthy" });
+		const signature = await computeWebhookSignature(payload);
+		const response = await app.request("/api/webhooks/push", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Hub-Signature-256": signature,
+			},
+			body: payload,
 		});
 		expect(response.status).toBe(400);
 		const body = (await response.json()) as { error: string };
 		expect(body.error).toContain("Missing required fields");
 	});
 
-	test("POST /api/webhooks/push with valid payload returns triggered workflows", async () => {
+	test("POST /api/webhooks/push with valid signature and payload returns triggered workflows", async () => {
+		const payload = JSON.stringify({
+			owner: "dexhorthy",
+			repo: "better-github",
+			branch: "main",
+			commitSha: "abc1234",
+		});
+		const signature = await computeWebhookSignature(payload);
 		const response = await app.request("/api/webhooks/push", {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				owner: "dexhorthy",
-				repo: "better-github",
-				branch: "main",
-				commitSha: "abc1234",
-			}),
+			headers: {
+				"Content-Type": "application/json",
+				"X-Hub-Signature-256": signature,
+			},
+			body: payload,
 		});
 		expect(response.status).toBe(200);
 		const body = (await response.json()) as {
@@ -238,18 +275,22 @@ describe("webhook api", () => {
 		expect(Array.isArray(body.triggered)).toBe(true);
 	});
 
-	test("POST /api/webhooks/push does not require auth", async () => {
+	test("POST /api/webhooks/push does not require Bearer auth token", async () => {
+		const payload = JSON.stringify({
+			owner: "dexhorthy",
+			repo: "better-github",
+			branch: "main",
+			commitSha: "def5678",
+		});
+		const signature = await computeWebhookSignature(payload);
 		const response = await app.request("/api/webhooks/push", {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				owner: "dexhorthy",
-				repo: "better-github",
-				branch: "main",
-				commitSha: "def5678",
-			}),
+			headers: {
+				"Content-Type": "application/json",
+				"X-Hub-Signature-256": signature,
+			},
+			body: payload,
 		});
-		// Should not return 401
-		expect(response.status).not.toBe(401);
+		expect(response.status).toBe(200);
 	});
 });

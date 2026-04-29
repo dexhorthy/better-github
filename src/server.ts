@@ -24,6 +24,7 @@ import {
 	shouldTrigger,
 	type WorkflowRun,
 } from "./workflows";
+import { verifyWebhookSignature } from "./webhook-signature";
 
 export const app = new Hono();
 
@@ -88,7 +89,15 @@ app.get("/api/repos", requireAuth, (c) => {
 
 // Webhook endpoint for push events
 app.post("/api/webhooks/push", async (c) => {
-	const body = (await c.req.json().catch(() => ({}))) as {
+	const rawBody = await c.req.text();
+	const signatureHeader = c.req.header("X-Hub-Signature-256");
+
+	const isValid = await verifyWebhookSignature(rawBody, signatureHeader);
+	if (!isValid) {
+		return c.json({ error: "Invalid webhook signature" }, 401);
+	}
+
+	const body = JSON.parse(rawBody) as {
 		owner?: string;
 		repo?: string;
 		branch?: string;

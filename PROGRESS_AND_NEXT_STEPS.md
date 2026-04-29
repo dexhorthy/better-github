@@ -164,15 +164,24 @@
   - Added API tests: missing fields returns 400, valid payload returns triggered workflows list, endpoint does not require auth.
   - All 45 unit tests pass; biome lint is clean.
 
+- Added webhook signature verification for push events using HMAC-SHA256:
+  - Created `src/webhook-signature.ts` with `computeWebhookSignature(body)` and `verifyWebhookSignature(body, signatureHeader)` functions.
+  - Uses `WEBHOOK_SECRET` env var (defaults to dev secret) to generate/verify signatures.
+  - Signature format matches GitHub's `X-Hub-Signature-256` header: `sha256=<hex>`.
+  - Updated `POST /api/webhooks/push` to require valid signature header; returns 401 on missing/invalid signature.
+  - Uses timing-safe comparison to prevent timing attacks.
+  - Added API tests: missing signature returns 401, invalid signature returns 401, valid signature with missing fields returns 400, valid signature with valid payload returns 200.
+  - All 47 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add webhook signature verification for push events using a shared secret.
-Automated Verification: POST `/api/webhooks/push` without valid HMAC signature returns 401; with valid signature returns 200.
-Browser Verification: N/A (webhook endpoint, no UI).
+Task: Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes.
+Automated Verification: `git remote -v` shows two remotes; `git push -u <new-origin> main` succeeds.
+Browser Verification: N/A.
 
 ## Next Up
-- Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes
+- Add workflow run detail view showing step logs and execution status
 
 ## Long Term Goals
 
