@@ -302,12 +302,20 @@
   - All 93 unit tests pass; biome check and `tsc --noEmit` are clean.
   - Deployed Worker version `16dd938d-2b64-4134-9412-576a976bebe6`; `curl -s -o /dev/null -w "%{http_code}" https://better-github.dexter-de6.workers.dev/api/repos/dexhorthy/better-github/workflows` returns `401` for unauthenticated requests.
 
+- Added Worker-backed workflow file write routes to `src/worker.ts`:
+  - Wired `POST /api/repos/:owner/:repo/workflows` (create), `PUT /api/repos/:owner/:repo/workflows/:name` (update), and `DELETE /api/repos/:owner/:repo/workflows/:name` (delete) behind `requireAuth`.
+  - All three call into the existing `saveWorkflowFile` / `deleteWorkflowFile` helpers in `freestyle-git.ts`; added a `bridgeFreestyleEnv()` helper that copies `c.env.FREESTYLE_API_KEY` / `c.env.FREESTYLE_REPO_ID` into `process.env` so the Freestyle SDK works in the Worker runtime.
+  - POST auto-appends `.yml` if no extension; returns `201 { ok, name }`. PUT/DELETE return `200 { ok: true }`.
+  - Added 6 worker tests asserting 401 on missing auth for each method, plus 400 when `name`/`content` is missing on POST and `content` is missing on PUT.
+  - Deployed Worker version `49d2066b-e091-498b-8df7-0d43e60ee77e`; verified live `POST/PUT/DELETE` against the deployed endpoints return `401` without an auth token.
+  - All 99 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add Worker-backed write routes for workflow files (`POST /workflows`, `PUT /workflows/:name`, `DELETE /workflows/:name`) so the deployed Workflow editor can create/save/delete workflow files end-to-end.
-Automated Verification: Worker-level tests asserting each route requires auth (401), validates required body fields (400), and on success returns 200/201 from the Worker.
-Browser Verification: On deployed Worker, open Actions → "View workflows", create a new workflow, edit and save it, then delete it; confirm Freestyle Git reflects each change via `GET /workflows` after each step.
+Task: Wire the deployed Worker UI's "View workflows" editor end-to-end against the new write routes by setting `FREESTYLE_REPO_ID` (and verifying `FREESTYLE_API_KEY`) on the Worker, then exercising create → edit → delete from the deployed Actions tab.
+Automated Verification: Add a Worker test asserting `POST /workflows` with valid body but no Freestyle creds returns 500 with the expected error shape (`{ error: "Repository not found" }`), so we have coverage of the success/error split path now that auth+validation are covered.
+Browser Verification: On deployed Worker, open Actions → "View workflows", create a workflow, edit + save it, then delete it; confirm `GET /workflows` reflects each change after the round-trip.
 
 ## Next Up
 

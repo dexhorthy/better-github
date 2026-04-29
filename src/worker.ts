@@ -4,7 +4,12 @@ import { Hono } from "hono";
 import type { AuthDB, MagicLinkResult, VerifyResult } from "./auth-core";
 import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth-core";
 import { repositories } from "./data";
-import { fetchFreestyleRepoData, fetchWorkflowFiles } from "./freestyle-git";
+import {
+	deleteWorkflowFile,
+	fetchFreestyleRepoData,
+	fetchWorkflowFiles,
+	saveWorkflowFile,
+} from "./freestyle-git";
 import { buildRepositoryOverview } from "./repository-overview";
 import type { WorkflowStepResult } from "./types";
 import {
@@ -379,17 +384,66 @@ app.post(
 	},
 );
 
+function bridgeFreestyleEnv(env: Env): void {
+	if (env.FREESTYLE_API_KEY) {
+		process.env.FREESTYLE_API_KEY = env.FREESTYLE_API_KEY;
+	}
+	if (env.FREESTYLE_REPO_ID) {
+		process.env.FREESTYLE_REPO_ID = env.FREESTYLE_REPO_ID;
+	}
+}
+
 app.get("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
 	const { repo } = c.req.param();
-	if (c.env.FREESTYLE_API_KEY) {
-		process.env.FREESTYLE_API_KEY = c.env.FREESTYLE_API_KEY;
-	}
-	if (c.env.FREESTYLE_REPO_ID) {
-		process.env.FREESTYLE_REPO_ID = c.env.FREESTYLE_REPO_ID;
-	}
+	bridgeFreestyleEnv(c.env);
 	const workflowFiles = await fetchWorkflowFiles(repo);
 	return c.json(workflowFiles);
 });
+
+app.post("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
+	const { repo } = c.req.param();
+	const body = (await c.req.json().catch(() => ({}))) as {
+		name?: string;
+		content?: string;
+	};
+
+	if (!body.name) return c.json({ error: "Missing name" }, 400);
+	if (!body.content) return c.json({ error: "Missing content" }, 400);
+
+	let fileName = body.name;
+	if (!fileName.endsWith(".yml") && !fileName.endsWith(".yaml")) {
+		fileName = `${fileName}.yml`;
+	}
+
+	bridgeFreestyleEnv(c.env);
+	const result = await saveWorkflowFile(repo, fileName, body.content);
+	if (!result.ok) return c.json({ error: result.error }, 500);
+	return c.json({ ok: true, name: fileName }, 201);
+});
+
+app.put("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
+	const { repo, name } = c.req.param();
+	const body = (await c.req.json().catch(() => ({}))) as { content?: string };
+
+	if (!body.content) return c.json({ error: "Missing content" }, 400);
+
+	bridgeFreestyleEnv(c.env);
+	const result = await saveWorkflowFile(repo, name, body.content);
+	if (!result.ok) return c.json({ error: result.error }, 500);
+	return c.json({ ok: true });
+});
+
+app.delete(
+	"/api/repos/:owner/:repo/workflows/:name",
+	requireAuth,
+	async (c) => {
+		const { repo, name } = c.req.param();
+		bridgeFreestyleEnv(c.env);
+		const result = await deleteWorkflowFile(repo, name);
+		if (!result.ok) return c.json({ error: result.error }, 500);
+		return c.json({ ok: true });
+	},
+);
 
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();

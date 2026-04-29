@@ -302,6 +302,104 @@ test("GET workflows returns array (empty when no FREESTYLE_API_KEY)", async () =
 	}
 });
 
+test("POST workflows returns 401 without auth", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request("http://localhost/api/repos/dexhorthy/better-github/workflows", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "x.yml", content: "name: x" }),
+		}),
+		{ DB: db, JWT_SECRET: "test-secret" },
+	);
+	expect(res.status).toBe(401);
+});
+
+test("POST workflows returns 400 when name missing", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request("http://localhost/api/repos/dexhorthy/better-github/workflows", {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ content: "name: x" }),
+		}),
+		{ DB: db, JWT_SECRET: jwtSecret },
+	);
+	expect(res.status).toBe(400);
+});
+
+test("POST workflows returns 400 when content missing", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request("http://localhost/api/repos/dexhorthy/better-github/workflows", {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ name: "ci.yml" }),
+		}),
+		{ DB: db, JWT_SECRET: jwtSecret },
+	);
+	expect(res.status).toBe(400);
+});
+
+test("PUT workflows/:name returns 401 without auth", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/workflows/ci.yml",
+			{
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ content: "name: x" }),
+			},
+		),
+		{ DB: db, JWT_SECRET: "test-secret" },
+	);
+	expect(res.status).toBe(401);
+});
+
+test("PUT workflows/:name returns 400 when content missing", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/workflows/ci.yml",
+			{
+				method: "PUT",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({}),
+			},
+		),
+		{ DB: db, JWT_SECRET: jwtSecret },
+	);
+	expect(res.status).toBe(400);
+});
+
+test("DELETE workflows/:name returns 401 without auth", async () => {
+	const db = makeFakeD1([]);
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/workflows/ci.yml",
+			{ method: "DELETE" },
+		),
+		{ DB: db, JWT_SECRET: "test-secret" },
+	);
+	expect(res.status).toBe(401);
+});
+
 test("POST actions/runs/:runId/cancel cancels a queued run in D1", async () => {
 	const jwtSecret = "test-secret";
 	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
