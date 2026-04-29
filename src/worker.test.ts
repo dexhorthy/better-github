@@ -3,6 +3,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { signJwt } from "./auth-core";
 import {
 	getWorkflowRunD1,
+	insertWorkflowRunD1,
 	listWorkflowRunsD1,
 	app as workerApp,
 } from "./worker";
@@ -43,6 +44,47 @@ function makeFakeD1(rows: Row[]): D1Database {
 				return null;
 			},
 			async run() {
+				if (sql.includes("INSERT INTO workflow_runs")) {
+					const [
+						id,
+						workflowName,
+						repoOwner,
+						repoName,
+						branch,
+						commitSha,
+						status,
+						conclusion,
+						startedAt,
+						completedAt,
+						logs,
+						steps,
+					] = bound;
+					rows.push({
+						id,
+						workflow_name: workflowName,
+						repo_owner: repoOwner,
+						repo_name: repoName,
+						branch,
+						commit_sha: commitSha,
+						status,
+						conclusion,
+						started_at: startedAt,
+						completed_at: completedAt,
+						logs,
+						steps,
+					});
+				}
+				if (sql.includes("UPDATE workflow_runs")) {
+					const [status, conclusion, completedAt, logs, steps, id] = bound;
+					const row = rows.find((r) => r.id === id);
+					if (row) {
+						if (status !== null) row.status = status;
+						if (conclusion !== null) row.conclusion = conclusion;
+						if (completedAt !== null) row.completed_at = completedAt;
+						if (logs !== null) row.logs = logs;
+						if (steps !== null) row.steps = steps;
+					}
+				}
 				return { success: true, meta: {} };
 			},
 		};
@@ -170,4 +212,97 @@ test("GET actions/runs/:runId returns 404 for unknown run", async () => {
 		{ DB: db, JWT_SECRET: jwtSecret },
 	);
 	expect(res.status).toBe(404);
+});
+
+test("insertWorkflowRunD1 inserts a row into D1", async () => {
+	const rows: Row[] = [];
+	const db = makeFakeD1(rows);
+	await insertWorkflowRunD1(db, {
+		id: "run-inserted",
+		workflowName: "CI",
+		repoOwner: "dexhorthy",
+		repoName: "better-github",
+		branch: "main",
+		commitSha: "abc",
+		status: "queued",
+		startedAt: "2026-01-05T00:00:00Z",
+	});
+
+	expect(rows).toHaveLength(1);
+	expect(rows[0]?.id).toBe("run-inserted");
+	expect(rows[0]?.workflow_name).toBe("CI");
+});
+
+test("POST actions/runs creates a queued workflow run in D1", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const rows: Row[] = [];
+	const db = makeFakeD1(rows);
+
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/actions/runs",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					branch: "main",
+					commitSha: "abc123",
+					workflowContent:
+						"name: Worker CI\non:\n  push:\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Test\n        run: bun test",
+				}),
+			},
+		),
+		{ DB: db, JWT_SECRET: jwtSecret },
+	);
+
+	expect(res.status).toBe(201);
+	const body = (await res.json()) as { id: string; status: string };
+	expect(body.id).toBeString();
+	expect(body.status).toBe("queued");
+	expect(rows).toHaveLength(1);
+	expect(rows[0]?.id).toBe(body.id);
+	expect(rows[0]?.workflow_name).toBe("Worker CI");
+	expect(rows[0]?.status).toBe("queued");
+});
+
+test("POST actions/runs/:runId/cancel cancels a queued run in D1", async () => {
+	const jwtSecret = "test-secret";
+	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
+	const rows: Row[] = [
+		{
+			id: "run-cancel",
+			workflow_name: "CI",
+			repo_owner: "dexhorthy",
+			repo_name: "better-github",
+			branch: "main",
+			commit_sha: "abc",
+			status: "queued",
+			conclusion: null,
+			started_at: "2026-01-06T00:00:00Z",
+			completed_at: null,
+			logs: null,
+			steps: null,
+		},
+	];
+	const db = makeFakeD1(rows);
+
+	const res = await workerApp.fetch(
+		new Request(
+			"http://localhost/api/repos/dexhorthy/better-github/actions/runs/run-cancel/cancel",
+			{
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+			},
+		),
+		{ DB: db, JWT_SECRET: jwtSecret },
+	);
+
+	expect(res.status).toBe(200);
+	expect(rows[0]?.status).toBe("cancelled");
+	expect(rows[0]?.conclusion).toBe("cancelled");
+	expect(rows[0]?.completed_at).toBeString();
 });

@@ -285,12 +285,22 @@
   - Added `src/worker.test.ts` with a fake-D1 stub asserting: helper maps rows correctly (incl. step logs), missing id returns null, authed `GET /actions/runs` returns persisted runs filtered by `repo_owner`/`repo_name`, unauthed returns 401, and unknown `:runId` returns 404.
   - All 88 unit tests pass; biome check and typecheck are clean.
 
+- Added D1-backed Actions write routes to `src/worker.ts`:
+  - Added `insertWorkflowRunD1(db, run)` and `updateWorkflowRunD1(db, id, updates)` helpers for the Worker/D1 runtime.
+  - Wired authenticated `POST /api/repos/:owner/:repo/actions/runs` in `worker.ts`; it accepts the same branch/commit/workflowContent/rerunOf body shape as the local Bun server, validates workflow YAML with `parseWorkflow()`, inserts a queued run, and returns `201 { id, status: "queued" }`.
+  - Wired authenticated `POST /api/repos/:owner/:repo/actions/runs/:runId/cancel`; queued runs are marked cancelled in D1, and in-progress runs are signaled through the shared cancellation registry.
+  - Added `migrations/0002_workflow_runs.sql` because the already-applied remote D1 `0001` migration predated the `workflow_runs` table even though the local file had since been edited.
+  - Applied the remote D1 migration with `wrangler d1 migrations apply better-github-auth --remote`.
+  - Deployed Worker version `d3c25fe0-8827-4c4b-836f-ae2d7b5be205` to `https://better-github.dexter-de6.workers.dev`.
+  - Browser-verified on the deployed Worker with a temporary AgentMail inbox (`better-github-codex-1777490097@agentmail.to`): magic-link login worked, Actions loaded, clicking "Run workflow" inserted and displayed a new queued `CI` run.
+  - All 91 unit tests pass; typecheck and Biome lint are clean; all 4 Playwright e2e tests pass.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add D1-backed Actions write routes to `src/worker.ts` (POST trigger run, POST cancel) so deployed Worker can also create and cancel workflow runs, not just read them.
-Automated Verification: Worker-level test asserting authenticated `POST /api/repos/:owner/:repo/actions/runs` inserts a row into the D1-backed runs store and returns 201 with a run id.
-Browser Verification: On deployed Worker, click "Run workflow" in the Actions tab and verify a new run appears in the list.
+Task: Add Worker-backed workflow file routes (`GET /api/repos/:owner/:repo/workflows` first) so the deployed "View workflows" button can load workflow YAML from Freestyle Git.
+Automated Verification: Worker-level test asserting authenticated `GET /api/repos/:owner/:repo/workflows` returns workflow file metadata/content and unauthenticated requests return 401.
+Browser Verification: On deployed Worker, click Actions → "View workflows" and verify the workflow file list/editor renders instead of an error.
 
 ## Next Up
 

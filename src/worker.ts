@@ -7,7 +7,11 @@ import { repositories } from "./data";
 import { fetchFreestyleRepoData } from "./freestyle-git";
 import { buildRepositoryOverview } from "./repository-overview";
 import type { WorkflowStepResult } from "./types";
-import type { WorkflowRun } from "./workflows";
+import {
+	parseWorkflow,
+	requestCancellation,
+	type WorkflowRun,
+} from "./workflows";
 
 type Env = {
 	DB: D1Database;
@@ -220,6 +224,76 @@ export async function getWorkflowRunD1(
 	return rowToRun(row);
 }
 
+export async function insertWorkflowRunD1(
+	db: D1Database,
+	run: WorkflowRun,
+): Promise<void> {
+	await db
+		.prepare(
+			`INSERT INTO workflow_runs (
+        id,
+        workflow_name,
+        repo_owner,
+        repo_name,
+        branch,
+        commit_sha,
+        status,
+        conclusion,
+        started_at,
+        completed_at,
+        logs,
+        steps
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		)
+		.bind(
+			run.id,
+			run.workflowName,
+			run.repoOwner,
+			run.repoName,
+			run.branch,
+			run.commitSha,
+			run.status,
+			run.conclusion ?? null,
+			run.startedAt,
+			run.completedAt ?? null,
+			run.logs ?? null,
+			run.steps ? JSON.stringify(run.steps) : null,
+		)
+		.run();
+}
+
+export async function updateWorkflowRunD1(
+	db: D1Database,
+	id: string,
+	updates: Partial<
+		Pick<
+			WorkflowRun,
+			"status" | "conclusion" | "completedAt" | "logs" | "steps"
+		>
+	>,
+): Promise<void> {
+	await db
+		.prepare(
+			`UPDATE workflow_runs
+      SET
+        status = COALESCE(?, status),
+        conclusion = COALESCE(?, conclusion),
+        completed_at = COALESCE(?, completed_at),
+        logs = COALESCE(?, logs),
+        steps = COALESCE(?, steps)
+      WHERE id = ?`,
+		)
+		.bind(
+			updates.status ?? null,
+			updates.conclusion ?? null,
+			updates.completedAt ?? null,
+			updates.logs ?? null,
+			updates.steps ? JSON.stringify(updates.steps) : null,
+			id,
+		)
+		.run();
+}
+
 app.get(
 	"/api/repos/:owner/:repo/actions/runs/:runId",
 	requireAuth,
@@ -236,6 +310,74 @@ app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	const runs = await listWorkflowRunsD1(c.env.DB, owner, repo);
 	return c.json(runs);
 });
+
+app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
+	const { owner, repo } = c.req.param();
+	const body = (await c.req.json().catch(() => ({}))) as {
+		branch?: string;
+		commitSha?: string;
+		workflowContent?: string;
+		rerunOf?: string;
+	};
+
+	let branch = body.branch ?? "main";
+	let commitSha = body.commitSha ?? "manual";
+
+	if (body.rerunOf) {
+		const originalRun = await getWorkflowRunD1(c.env.DB, body.rerunOf);
+		if (!originalRun) {
+			return c.json({ error: "Original run not found" }, 404);
+		}
+		branch = originalRun.branch;
+		commitSha = originalRun.commitSha;
+	}
+
+	const workflowContent =
+		body.workflowContent ??
+		`name: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Checkout\n        uses: checkout\n      - name: Install\n        run: bun install\n      - name: Test\n        run: bun test`;
+
+	const workflow = parseWorkflow(workflowContent);
+	if (!workflow) {
+		return c.json({ error: "Invalid workflow YAML" }, 400);
+	}
+
+	const runId = crypto.randomUUID();
+	const run: WorkflowRun = {
+		id: runId,
+		workflowName: workflow.name,
+		repoOwner: owner,
+		repoName: repo,
+		branch,
+		commitSha,
+		status: "queued",
+		startedAt: new Date().toISOString(),
+	};
+
+	await insertWorkflowRunD1(c.env.DB, run);
+	return c.json({ id: runId, status: "queued" }, 201);
+});
+
+app.post(
+	"/api/repos/:owner/:repo/actions/runs/:runId/cancel",
+	requireAuth,
+	async (c) => {
+		const { runId } = c.req.param();
+		const run = await getWorkflowRunD1(c.env.DB, runId);
+		if (!run) return c.json({ error: "Run not found" }, 404);
+		if (run.status !== "queued" && run.status !== "in_progress") {
+			return c.json({ error: "Run is not cancellable" }, 400);
+		}
+		requestCancellation(runId);
+		if (run.status === "queued") {
+			await updateWorkflowRunD1(c.env.DB, runId, {
+				status: "cancelled",
+				conclusion: "cancelled",
+				completedAt: new Date().toISOString(),
+			});
+		}
+		return c.json({ ok: true });
+	},
+);
 
 app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();
