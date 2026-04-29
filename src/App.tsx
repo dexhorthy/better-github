@@ -108,7 +108,10 @@ export function AuthForm({
 					<h1 className="auth-title">Sign in to Better GitHub</h1>
 					{sent ? (
 						<div className="auth-sent" data-testid="auth-sent">
-							<p>Check your email — we sent a sign-in link to <strong>{email}</strong>.</p>
+							<p>
+								Check your email — we sent a sign-in link to{" "}
+								<strong>{email}</strong>.
+							</p>
 							<p className="auth-hint">The link expires in 15 minutes.</p>
 							<button
 								type="button"

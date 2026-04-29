@@ -91,16 +91,24 @@
   - API tests: missing/invalid email → 400; valid token → 200 JWT; expired token → 401; unknown token → 401; token consumed on first use.
   - Browser-verified: email form shows no password field; submitting shows confirmation screen.
 
+- Migrated from SQLite to Postgres with Docker Compose:
+  - Added `docker-compose.yml` at repo root: `postgres:16` listening on port 5434 with healthcheck.
+  - Replaced `bun:sqlite` / `Database` in `src/auth.ts` with `Bun.SQL` (built-in Bun Postgres client).
+  - `DATABASE_URL` env var (default: `postgres://postgres:postgres@localhost:5434/better_github`).
+  - Schema unchanged: `users` + `magic_link_tokens` tables, same columns, created with `CREATE TABLE IF NOT EXISTS`.
+  - Test helpers `_insertTestToken` / `_hasPendingToken` converted to async (`Promise<void>` / `Promise<boolean>`).
+  - All 34 unit tests pass with Postgres; biome lint is clean.
+  - Browser-verified: login form shows email input + "Send magic link"; submitting shows "Check your email" confirmation.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Migrate from SQLite to Postgres in a local Docker Compose on port 5434. Replace `bun:sqlite` with `Bun.sql` (the built-in Bun Postgres client). Add a `docker-compose.yml` at the repo root that starts `postgres:16` on port 5434. Update `src/auth.ts` to use `Bun.sql` with the same schema (users, magic_link_tokens). Keep `AUTH_DB_PATH` unused but add `DATABASE_URL` env var (default: `postgres://postgres:postgres@localhost:5434/better_github`). Migrate existing test helpers to Postgres.
-Automated Verification: API tests for auth and repo continue to pass with Postgres running.
-Browser Verification: register email, see confirmation screen (same as before).
+Task: Support multiple repositories. Add a repositories list page at `/` (after login) that shows all repos for the logged-in user. Each repo is its own row with name, description, visibility, and last-updated. Clicking a repo navigates to `/:owner/:repo`. Move the current single-repo code-browser to `/:owner/:repo`. Wire a second seeded Freestyle repo (or use fixture data) so at least 2 repos appear in the list.
+Automated Verification: New API endpoint `GET /api/repos` returns an array of repositories; existing repo tests still pass.
+Browser Verification: After login, see a list of repos; click one to open the code browser.
 
 ## Next Up
 
-- migrate from sqlite to postgres in local docker compose on 5434
 - support for private/public repos and multiple repositories
 
 ## Long Term Goals

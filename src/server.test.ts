@@ -7,7 +7,7 @@ import type { RepositoryOverview } from "./types";
 async function getTestToken(): Promise<string> {
 	const email = `test-${Date.now()}@example.com`;
 	const rawToken = `test-token-${Date.now()}`;
-	_insertTestToken(email, rawToken, Date.now() + 60_000);
+	await _insertTestToken(email, rawToken, Date.now() + 60_000);
 	const res = await app.request(
 		`/api/auth/verify?token=${encodeURIComponent(rawToken)}`,
 	);
@@ -37,7 +37,7 @@ describe("auth api", () => {
 	test("verify with a valid token returns JWT and email", async () => {
 		const email = `verify-${Date.now()}@example.com`;
 		const rawToken = `verify-token-${Date.now()}`;
-		_insertTestToken(email, rawToken, Date.now() + 60_000);
+		await _insertTestToken(email, rawToken, Date.now() + 60_000);
 
 		const response = await app.request(
 			`/api/auth/verify?token=${encodeURIComponent(rawToken)}`,
@@ -54,7 +54,7 @@ describe("auth api", () => {
 		const email = `expired-${Date.now()}@example.com`;
 		const rawToken = `expired-token-${Date.now()}`;
 		// expiresAt in the past
-		_insertTestToken(email, rawToken, Date.now() - 1_000);
+		await _insertTestToken(email, rawToken, Date.now() - 1_000);
 
 		const response = await app.request(
 			`/api/auth/verify?token=${encodeURIComponent(rawToken)}`,
@@ -72,22 +72,20 @@ describe("auth api", () => {
 	test("verify consumes the token (second use returns 401)", async () => {
 		const email = `onetime-${Date.now()}@example.com`;
 		const rawToken = `onetime-token-${Date.now()}`;
-		_insertTestToken(email, rawToken, Date.now() + 60_000);
+		await _insertTestToken(email, rawToken, Date.now() + 60_000);
 
-		await app.request(
-			`/api/auth/verify?token=${encodeURIComponent(rawToken)}`,
-		);
+		await app.request(`/api/auth/verify?token=${encodeURIComponent(rawToken)}`);
 		const second = await app.request(
 			`/api/auth/verify?token=${encodeURIComponent(rawToken)}`,
 		);
 		expect(second.status).toBe(401);
 	});
 
-	test("_hasPendingToken returns true after _insertTestToken", () => {
+	test("_hasPendingToken returns true after _insertTestToken", async () => {
 		const email = `pending-${Date.now()}@example.com`;
 		const rawToken = `pending-token-${Date.now()}`;
-		_insertTestToken(email, rawToken, Date.now() + 60_000);
-		expect(_hasPendingToken(email)).toBe(true);
+		await _insertTestToken(email, rawToken, Date.now() + 60_000);
+		expect(await _hasPendingToken(email)).toBe(true);
 	});
 });
 

@@ -1,30 +1,36 @@
-import { Database } from "bun:sqlite";
+import { SQL } from "bun";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-in-production";
 const ALGORITHM = "HS256";
 const TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
-const db = new Database(process.env.AUTH_DB_PATH ?? "auth.db", {
-	create: true,
-});
+const DATABASE_URL =
+	process.env.DATABASE_URL ??
+	"postgres://postgres:postgres@localhost:5434/better_github";
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`);
+const sql = new SQL(DATABASE_URL);
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS magic_link_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT NOT NULL,
-    token TEXT UNIQUE NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`);
+async function initDb(): Promise<void> {
+	await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+	await sql`
+    CREATE TABLE IF NOT EXISTS magic_link_tokens (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      expires_at BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+}
+
+// Initialize schema on module load
+const _ready = initDb();
 
 function base64url(data: Uint8Array): string {
 	return btoa(String.fromCharCode(...data))
@@ -141,25 +147,24 @@ export async function requestMagicLink(
 	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 		return { ok: false, error: "Invalid email address" };
 
+	await _ready;
+
 	// Upsert the user so they exist when the token is later verified
-	db.run("INSERT OR IGNORE INTO users (email) VALUES (?)", [email]);
+	await sql`INSERT INTO users (email) VALUES (${email}) ON CONFLICT (email) DO NOTHING`;
 
 	// Delete any existing tokens for this email before issuing a new one
-	db.run("DELETE FROM magic_link_tokens WHERE email = ?", [email]);
+	await sql`DELETE FROM magic_link_tokens WHERE email = ${email}`;
 
 	const token = generateToken();
 	const expiresAt = Date.now() + TOKEN_TTL_MS;
 
-	db.run(
-		"INSERT INTO magic_link_tokens (email, token, expires_at) VALUES (?, ?, ?)",
-		[email, token, expiresAt],
-	);
+	await sql`INSERT INTO magic_link_tokens (email, token, expires_at) VALUES (${email}, ${token}, ${expiresAt})`;
 
 	try {
 		await sendMagicLinkEmail(email, token, baseUrl);
 	} catch (err) {
 		// Clean up the token if email delivery fails
-		db.run("DELETE FROM magic_link_tokens WHERE token = ?", [token]);
+		await sql`DELETE FROM magic_link_tokens WHERE token = ${token}`;
 		console.error("Magic link email failed:", err);
 		return { ok: false, error: "Failed to send magic link email" };
 	}
@@ -174,19 +179,23 @@ export type VerifyResult =
 export async function verifyMagicLink(rawToken: string): Promise<VerifyResult> {
 	if (!rawToken) return { ok: false, error: "Token is required" };
 
-	const row = db
-		.query("SELECT email, expires_at FROM magic_link_tokens WHERE token = ?")
-		.get(rawToken) as { email: string; expires_at: number } | null;
+	await _ready;
+
+	const rows = await sql<
+		{ email: string; expires_at: string }[]
+	>`SELECT email, expires_at FROM magic_link_tokens WHERE token = ${rawToken}`;
+
+	const row = rows[0] ?? null;
 
 	if (!row) return { ok: false, error: "Invalid or expired token" };
 
-	if (Date.now() > row.expires_at) {
-		db.run("DELETE FROM magic_link_tokens WHERE token = ?", [rawToken]);
+	if (Date.now() > Number(row.expires_at)) {
+		await sql`DELETE FROM magic_link_tokens WHERE token = ${rawToken}`;
 		return { ok: false, error: "Invalid or expired token" };
 	}
 
 	// Consume the token
-	db.run("DELETE FROM magic_link_tokens WHERE token = ?", [rawToken]);
+	await sql`DELETE FROM magic_link_tokens WHERE token = ${rawToken}`;
 
 	const jwt = await sign({ email: row.email });
 	return { ok: true, token: jwt, email: row.email };
@@ -201,24 +210,21 @@ export async function verifyToken(
 }
 
 // Exported for testing only — lets tests insert a token row directly
-export function _insertTestToken(
+export async function _insertTestToken(
 	email: string,
 	token: string,
 	expiresAt: number,
-): void {
-	db.run("INSERT OR IGNORE INTO users (email) VALUES (?)", [email]);
-	db.run(
-		"INSERT INTO magic_link_tokens (email, token, expires_at) VALUES (?, ?, ?)",
-		[email, token, expiresAt],
-	);
+): Promise<void> {
+	await _ready;
+	await sql`INSERT INTO users (email) VALUES (${email}) ON CONFLICT (email) DO NOTHING`;
+	await sql`INSERT INTO magic_link_tokens (email, token, expires_at) VALUES (${email}, ${token}, ${expiresAt})`;
 }
 
 // Exported for testing only — checks whether a pending token row exists
-export function _hasPendingToken(email: string): boolean {
-	const row = db
-		.query(
-			"SELECT id FROM magic_link_tokens WHERE email = ? AND expires_at > ?",
-		)
-		.get(email, Date.now());
-	return row !== null;
+export async function _hasPendingToken(email: string): Promise<boolean> {
+	await _ready;
+	const rows = await sql<
+		{ id: number }[]
+	>`SELECT id FROM magic_link_tokens WHERE email = ${email} AND expires_at > ${Date.now()}`;
+	return rows.length > 0;
 }
