@@ -110,10 +110,8 @@ export async function executeWorkflowRun(
 		try {
 			const spec = new VmSpec()
 				.baseImage(new VmBaseImage("FROM oven/bun:1"))
-				.rootfsSizeGb(10)
-				.memSizeGb(2)
-				.vcpuCount(2)
-				.workdir("/app");
+				.workdir("/app")
+				.aptDeps("git");
 
 			const { vm, vmId } = await freestyle.vms.create(spec);
 			logs.push(`VM created: ${vmId}`);

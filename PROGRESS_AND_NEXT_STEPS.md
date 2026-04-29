@@ -140,17 +140,22 @@
   - Browser-verified: Actions tab shows "Workflow runs" heading and "Run workflow" button; clicking tab toggles between Code and Actions views.
   - All 42 unit tests pass; biome lint is clean.
 
+- Wired up Freestyle VM execution for workflow runs:
+  - Fixed route order in `server.ts`: more specific routes (`/api/repos/:owner/:repo/actions/runs`) now come before less specific ones (`/api/repos/:owner/:repo`) to prevent routing conflicts.
+  - Updated `workflows.ts` VmSpec to use plan defaults (removed custom `.rootfsSizeGb()`, `.memSizeGb()`, `.vcpuCount()` to avoid CUSTOM_SIZING_NOT_ALLOWED errors).
+  - Added `.aptDeps("git")` to VmSpec so git is available for checkout step.
+  - API-verified: POST `/api/repos/:owner/:repo/actions/runs` creates a run that transitions queued → in_progress, and VMs are provisioned via Freestyle API.
+  - Browser-verified: Actions tab shows workflow runs with status icons (In Progress, Failure) and the "Run workflow" button triggers new runs.
+  - All 42 unit tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Wire up actual Freestyle VM execution for workflow runs. Currently the workflow runner has the structure but needs a valid Freestyle API key and VM provisioning. Test by triggering a run and verifying it completes with logs.
-Automated Verification: Trigger a workflow run via the UI; the run transitions from queued → in_progress → success/failure with logs.
-Browser Verification: Navigate to Actions tab, click "Run workflow", and see the run status update over time.
+Task: Add .better-github/workflows/deploy.yml to deploy the Cloudflare stack on push/merge to main.
+Automated Verification: The deploy.yml file parses correctly and can be triggered via the API.
+Browser Verification: View the deploy workflow in the Actions tab.
 
 ## Next Up
-
-- Wire up Freestyle VM execution to actually run CI jobs (needs FREESTYLE_API_KEY with VM permissions)
-- Add .better-github/workflows/deploy.yml to deploy CF stack on push/merge to main
 - Add webhook endpoint to trigger workflows on push events
 - Add a second remote for this repo, move development to that origin, update PROMPT.md with a 5-10 word note to push to both remotes
 

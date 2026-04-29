@@ -85,27 +85,7 @@ app.get("/api/repos", requireAuth, (c) => {
 	return c.json(repositories);
 });
 
-app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
-	const { owner, repo } = c.req.param();
-	const path = c.req.query("path") ?? "";
-	const fixture = repositories.find(
-		(item) => item.owner === owner && item.name === repo,
-	);
-
-	if (!fixture) {
-		return c.json({ message: "Repository not found" }, 404);
-	}
-
-	const liveData = await fetchFreestyleRepoData(repo, path);
-	return c.json(buildRepositoryOverview(fixture, path, liveData));
-});
-
-app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
-	const { owner, repo } = c.req.param();
-	const runs = await listWorkflowRuns(owner, repo);
-	return c.json(runs);
-});
-
+// More specific routes must come before less specific ones
 app.get(
 	"/api/repos/:owner/:repo/actions/runs/:runId",
 	requireAuth,
@@ -116,6 +96,12 @@ app.get(
 		return c.json(run);
 	},
 );
+
+app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
+	const { owner, repo } = c.req.param();
+	const runs = await listWorkflowRuns(owner, repo);
+	return c.json(runs);
+});
 
 app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();
@@ -170,6 +156,22 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	})().catch(console.error);
 
 	return c.json({ id: runId, status: "queued" }, 201);
+});
+
+// Less specific route comes after more specific /actions/runs routes
+app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
+	const { owner, repo } = c.req.param();
+	const path = c.req.query("path") ?? "";
+	const fixture = repositories.find(
+		(item) => item.owner === owner && item.name === repo,
+	);
+
+	if (!fixture) {
+		return c.json({ message: "Repository not found" }, 404);
+	}
+
+	const liveData = await fetchFreestyleRepoData(repo, path);
+	return c.json(buildRepositoryOverview(fixture, path, liveData));
 });
 
 app.use("/*", serveStatic({ root: "./dist" }));
