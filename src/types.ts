@@ -47,6 +47,7 @@ export type RepositoryOverview = {
   branches: GitBranch[];
   commits: GitCommit[];
   pullRequests: GitPullRequest[];
+  path: string;
   files: readonly {
     type: "directory" | "file";
     name: string;

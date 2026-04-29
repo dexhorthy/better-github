@@ -60,7 +60,7 @@ function makeGitUser(name: string, email: string): GitUser {
   };
 }
 
-export async function fetchFreestyleRepoData(repoName: string): Promise<FreestyleRepoData | null> {
+export async function fetchFreestyleRepoData(repoName: string, path = ""): Promise<FreestyleRepoData | null> {
   try {
     const repoId = await findFreestyleRepoId(repoName);
     if (!repoId) return null;
@@ -72,7 +72,7 @@ export async function fetchFreestyleRepoData(repoName: string): Promise<Freestyl
         repo.branches.getDefaultBranch(),
         repo.branches.list(),
         repo.commits.list({ limit: 10 }),
-        repo.contents.get({ path: "" }),
+        repo.contents.get({ path }),
       ]);
 
     const defaultBranch =

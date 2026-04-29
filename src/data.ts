@@ -77,3 +77,19 @@ export const fileTree = [
   { type: "file", name: "package.json", lastCommit: "Install Vite and Hono", updatedAt: "2026-04-29T12:49:00.000Z" },
   { type: "file", name: "PROGRESS_AND_NEXT_STEPS.md", lastCommit: "Track current implementation priorities", updatedAt: "2026-04-29T13:08:00.000Z" },
 ] as const;
+
+export const fileTreeByPath = {
+  "": fileTree,
+  src: [
+    { type: "file", name: "App.tsx", lastCommit: "Build repository overview shell", updatedAt: "2026-04-29T13:06:00.000Z" },
+    { type: "file", name: "data.ts", lastCommit: "Add mocked repository data", updatedAt: "2026-04-29T12:44:00.000Z" },
+    { type: "file", name: "freestyle-git.ts", lastCommit: "Wire Freestyle Git repository metadata", updatedAt: "2026-04-29T13:54:00.000Z" },
+    { type: "file", name: "main.tsx", lastCommit: "Create Vite React entrypoint", updatedAt: "2026-04-29T12:20:00.000Z" },
+    { type: "file", name: "server.ts", lastCommit: "Add Hono repository API", updatedAt: "2026-04-29T13:06:00.000Z" },
+    { type: "file", name: "styles.css", lastCommit: "Build repository overview shell", updatedAt: "2026-04-29T13:06:00.000Z" },
+  ],
+} as const;
+
+export function getFixtureFilesForPath(path: string) {
+  return fileTreeByPath[path as keyof typeof fileTreeByPath] ?? [];
+}

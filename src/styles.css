@@ -121,10 +121,12 @@ input {
 
 .repo-actions button,
 .branch-button,
-.code-button {
+.code-button,
+.path-breadcrumbs button,
+.file-link {
   display: inline-flex;
-  gap: 7px;
   align-items: center;
+  gap: 7px;
   height: 34px;
   padding: 0 12px;
   color: #24292f;
@@ -205,6 +207,41 @@ input {
   border-color: #1f883d;
 }
 
+.path-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 10px 14px;
+  background: #fff;
+  border-right: 1px solid #d0d7de;
+  border-left: 1px solid #d0d7de;
+}
+
+.path-breadcrumbs span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.path-breadcrumbs button {
+  height: 28px;
+  padding: 0 4px;
+  color: #0969da;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+}
+
+.path-breadcrumbs button:hover,
+.file-link:hover {
+  text-decoration: underline;
+}
+
+.path-separator {
+  color: #59636e;
+}
+
 .latest-commit {
   grid-template-columns: max-content max-content minmax(0, 1fr) max-content;
   gap: 10px;
@@ -215,7 +252,8 @@ input {
 
 .latest-commit span,
 .file-row span,
-.file-row strong {
+.file-row strong,
+.file-link {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -259,6 +297,17 @@ input {
 .file-row time {
   color: #59636e;
   font-size: 13px;
+}
+
+.file-link {
+  justify-content: flex-start;
+  height: auto;
+  padding: 0;
+  color: #0969da;
+  font-weight: 600;
+  text-align: left;
+  background: transparent;
+  border: 0;
 }
 
 .sidebar {

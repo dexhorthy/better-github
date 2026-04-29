@@ -5,6 +5,7 @@
 - Hono provides Vite build and dev-server packages, but this first slice keeps Hono as a standalone Bun API and uses Vite's dev proxy for `/api`.
 - The installed `freestyle` SDK exposes `freestyle.git.repos.create({ name, public, defaultBranch, import })` for initial file imports, and `repo.commits.create({ branch, message, files, author })` for later pushes. File imports accept a path-to-content map; commit pushes accept an array of `{ path, content }` file entries.
 - `repo.contents.get({ path: "" })` returns top-level entries after import, which the app can use to render live repository file names without cloning locally.
+- `repo.contents.get({ path: "src" })` returns a directory response for a nested folder and includes child entries such as `App.tsx`, `server.ts`, and `styles.css`. This is enough for GitHub-like directory browsing without cloning the repository.
 
 Sources checked on 2026-04-29:
 

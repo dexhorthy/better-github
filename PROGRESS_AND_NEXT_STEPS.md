@@ -16,13 +16,17 @@
   - Uses `git ls-files` so ignored local files like `.env` and dependency folders are not uploaded.
   - Created and updated Freestyle repo `be1dc513-a62f-4be9-aee6-a160fd428f46` with 24 tracked files.
   - Browser-verified the UI renders live Freestyle file names and the seeded commit history.
+- Added nested directory browsing for live Freestyle directories:
+  - `/api/repos/:owner/:repo?path=src` returns child file entries for the requested directory.
+  - The code tab renders path breadcrumbs and clickable directory rows.
+  - Browser-verified clicking `src` updates the file list to source files including `App.tsx` and `server.ts`.
 
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add nested directory browsing for one live Freestyle directory, starting with clicking `src`.
-Automated Verification: API/unit test for requesting and returning child entries for a directory path.
-Browser Verification: Click `src` in the file list and confirm the UI updates to show files such as `App.tsx` and `server.ts`.
+Task: Add a file contents view for one live Freestyle file, starting with clicking `src/App.tsx`.
+Automated Verification: API/unit test for requesting a file path and returning its text content.
+Browser Verification: Click `src`, click `App.tsx`, and confirm the UI shows the file contents with a breadcrumb ending in `src / App.tsx`.
 
 
 ## Later

@@ -6,6 +6,7 @@ import {
   Eye,
   File,
   Folder,
+  FolderOpen,
   GitBranch,
   GitCommitHorizontal,
   GitFork,
@@ -37,16 +38,22 @@ function timeAgo(value: string) {
 
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [path, setPath] = useState("");
 
   useEffect(() => {
-    fetch("/api/repos/dexhorthy/better-github")
+    const params = new URLSearchParams();
+    if (path) params.set("path", path);
+    const url = `/api/repos/dexhorthy/better-github${params.size ? `?${params}` : ""}`;
+
+    setState({ status: "loading" });
+    fetch(url)
       .then((response) => {
         if (!response.ok) throw new Error("Repository could not be loaded");
         return response.json() as Promise<RepositoryOverview>;
       })
       .then((data) => setState({ status: "ready", data }))
       .catch((error: Error) => setState({ status: "error", message: error.message }));
-  }, []);
+  }, [path]);
 
   const activePrs = useMemo(() => {
     if (state.status !== "ready") return 0;
@@ -63,6 +70,9 @@ function App() {
 
   const { repository, branches, commits, files, pullRequests } = state.data;
   const latestCommit = commits[0];
+  const pathSegments = state.data.path.split("/").filter(Boolean);
+  const openDirectory = (name: string) => setPath(path ? `${path}/${name}` : name);
+  const openPathSegment = (index: number) => setPath(pathSegments.slice(0, index + 1).join("/"));
 
   return (
     <main className="app-shell">
@@ -134,6 +144,20 @@ function App() {
               Code
             </button>
           </div>
+          <nav className="path-breadcrumbs" aria-label="Directory path">
+            <button type="button" onClick={() => setPath("")}>
+              <FolderOpen size={16} aria-hidden="true" />
+              {repository.name}
+            </button>
+            {pathSegments.map((segment, index) => (
+              <span key={pathSegments.slice(0, index + 1).join("/")}>
+                <span className="path-separator">/</span>
+                <button type="button" onClick={() => openPathSegment(index)}>
+                  {segment}
+                </button>
+              </span>
+            ))}
+          </nav>
           <div className="latest-commit">
             {latestCommit ? (
               <>
@@ -149,10 +173,18 @@ function App() {
           <div className="file-list">
             {files.map((item) => {
               const Icon = item.type === "directory" ? Folder : File;
+              const rowName =
+                item.type === "directory" ? (
+                  <button className="file-link" type="button" onClick={() => openDirectory(item.name)}>
+                    {item.name}
+                  </button>
+                ) : (
+                  <strong>{item.name}</strong>
+                );
               return (
                 <div className="file-row" key={item.name}>
                   <Icon size={18} aria-hidden="true" />
-                  <strong>{item.name}</strong>
+                  {rowName}
                   <span>{item.lastCommit}</span>
                   <time dateTime={item.updatedAt}>{timeAgo(item.updatedAt)}</time>
                 </div>

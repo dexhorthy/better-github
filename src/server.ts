@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { fetchFreestyleRepoData } from "./freestyle-git";
-import { branches, commits, fileTree, pullRequests, repositories } from "./data";
+import { branches, commits, getFixtureFilesForPath, pullRequests, repositories } from "./data";
 import type { RepositoryOverview } from "./types";
 
 export const app = new Hono();
@@ -10,13 +10,15 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 
 app.get("/api/repos/:owner/:repo", async (c) => {
   const { owner, repo } = c.req.param();
+  const path = c.req.query("path") ?? "";
   const fixture = repositories.find((item) => item.owner === owner && item.name === repo);
 
   if (!fixture) {
     return c.json({ message: "Repository not found" }, 404);
   }
 
-  const liveData = await fetchFreestyleRepoData(repo);
+  const liveData = await fetchFreestyleRepoData(repo, path);
+  const fixtureFiles = getFixtureFilesForPath(path);
 
   const overview: RepositoryOverview = {
     repository: liveData
@@ -30,7 +32,8 @@ app.get("/api/repos/:owner/:repo", async (c) => {
     branches: liveData?.branches.length ? liveData.branches : branches,
     commits: liveData?.commits.length ? liveData.commits : commits,
     pullRequests,
-    files: liveData?.files.length ? liveData.files : fileTree,
+    path,
+    files: liveData?.files.length ? liveData.files : fixtureFiles,
   };
 
   return c.json(overview);
