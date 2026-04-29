@@ -33,7 +33,8 @@ app.get("/api/repos/:owner/:repo", async (c) => {
     commits: liveData?.commits.length ? liveData.commits : commits,
     pullRequests,
     path,
-    files: liveData?.files.length ? liveData.files : fixtureFiles,
+    files: liveData?.fileContent ? [] : liveData?.files.length ? liveData.files : fixtureFiles,
+    fileContent: liveData?.fileContent,
   };
 
   return c.json(overview);

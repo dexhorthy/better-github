@@ -42,6 +42,13 @@ export type GitPullRequest = {
   updatedAt: string;
 };
 
+export type FileContent = {
+  path: string;
+  name: string;
+  size: number;
+  text: string;
+};
+
 export type RepositoryOverview = {
   repository: GitRepository;
   branches: GitBranch[];
@@ -54,4 +61,5 @@ export type RepositoryOverview = {
     lastCommit: string;
     updatedAt: string;
   }[];
+  fileContent?: FileContent;
 };

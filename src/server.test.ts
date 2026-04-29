@@ -27,6 +27,18 @@ describe("repository api", () => {
     expect(body.files.map((file) => file.name)).toContain("server.ts");
   });
 
+  test("returns file contents when path points at a tracked file", async () => {
+    const response = await app.request("/api/repos/dexhorthy/better-github?path=src/App.tsx");
+    const body = (await response.json()) as RepositoryOverview;
+
+    expect(response.status).toBe(200);
+    expect(body.path).toBe("src/App.tsx");
+    expect(body.fileContent).toBeDefined();
+    expect(body.fileContent?.name).toBe("App.tsx");
+    expect(body.fileContent?.text).toContain("function App()");
+    expect(body.files.length).toBe(0);
+  });
+
   test("returns not found for missing repositories", async () => {
     const response = await app.request("/api/repos/dexhorthy/missing");
     expect(response.status).toBe(404);

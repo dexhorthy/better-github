@@ -68,10 +68,11 @@ function App() {
     return <main className="app-shell loading">{state.message}</main>;
   }
 
-  const { repository, branches, commits, files, pullRequests } = state.data;
+  const { repository, branches, commits, files, pullRequests, fileContent } = state.data;
   const latestCommit = commits[0];
   const pathSegments = state.data.path.split("/").filter(Boolean);
   const openDirectory = (name: string) => setPath(path ? `${path}/${name}` : name);
+  const openFile = (name: string) => setPath(path ? `${path}/${name}` : name);
   const openPathSegment = (index: number) => setPath(pathSegments.slice(0, index + 1).join("/"));
 
   return (
@@ -170,27 +171,42 @@ function App() {
               <span>No commits yet</span>
             )}
           </div>
-          <div className="file-list">
-            {files.map((item) => {
-              const Icon = item.type === "directory" ? Folder : File;
-              const rowName =
-                item.type === "directory" ? (
-                  <button className="file-link" type="button" onClick={() => openDirectory(item.name)}>
-                    {item.name}
-                  </button>
-                ) : (
-                  <strong>{item.name}</strong>
+          {fileContent ? (
+            <div className="file-viewer" aria-label={`Contents of ${fileContent.path}`}>
+              <div className="file-viewer-header">
+                <File size={16} aria-hidden="true" />
+                <strong>{fileContent.name}</strong>
+                <span>{fileContent.size} bytes</span>
+              </div>
+              <pre className="file-viewer-body">
+                <code>{fileContent.text}</code>
+              </pre>
+            </div>
+          ) : (
+            <div className="file-list">
+              {files.map((item) => {
+                const Icon = item.type === "directory" ? Folder : File;
+                const rowName =
+                  item.type === "directory" ? (
+                    <button className="file-link" type="button" onClick={() => openDirectory(item.name)}>
+                      {item.name}
+                    </button>
+                  ) : (
+                    <button className="file-link" type="button" onClick={() => openFile(item.name)}>
+                      {item.name}
+                    </button>
+                  );
+                return (
+                  <div className="file-row" key={item.name}>
+                    <Icon size={18} aria-hidden="true" />
+                    {rowName}
+                    <span>{item.lastCommit}</span>
+                    <time dateTime={item.updatedAt}>{timeAgo(item.updatedAt)}</time>
+                  </div>
                 );
-              return (
-                <div className="file-row" key={item.name}>
-                  <Icon size={18} aria-hidden="true" />
-                  {rowName}
-                  <span>{item.lastCommit}</span>
-                  <time dateTime={item.updatedAt}>{timeAgo(item.updatedAt)}</time>
-                </div>
-              );
-            })}
-          </div>
+              })}
+            </div>
+          )}
         </section>
 
         <aside className="sidebar" aria-label="Repository details">

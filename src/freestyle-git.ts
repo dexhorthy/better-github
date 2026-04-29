@@ -1,5 +1,5 @@
 import { freestyle } from "freestyle";
-import type { GitBranch, GitCommit, GitUser } from "./types";
+import type { FileContent, GitBranch, GitCommit, GitUser } from "./types";
 
 const FREESTYLE_API_BASE = "https://api.freestyle.sh";
 
@@ -50,6 +50,7 @@ export type FreestyleRepoData = {
   branches: GitBranch[];
   commits: GitCommit[];
   files: { type: "directory" | "file"; name: string; lastCommit: string; updatedAt: string }[];
+  fileContent?: FileContent;
 };
 
 function makeGitUser(name: string, email: string): GitUser {
@@ -100,6 +101,7 @@ export async function fetchFreestyleRepoData(repoName: string, path = ""): Promi
         : [];
 
     let files: FreestyleRepoData["files"] = [];
+    let fileContent: FileContent | undefined;
     if (contentsResult.status === "fulfilled") {
       const contents = contentsResult.value;
       if (contents.type === "dir") {
@@ -110,6 +112,14 @@ export async function fetchFreestyleRepoData(repoName: string, path = ""): Promi
           lastCommit: latestMessage,
           updatedAt: new Date().toISOString(),
         }));
+      } else if (contents.type === "file") {
+        const text = Buffer.from(contents.content, "base64").toString("utf8");
+        fileContent = {
+          path: contents.path,
+          name: contents.name,
+          size: contents.size,
+          text,
+        };
       }
     }
 
@@ -125,6 +135,7 @@ export async function fetchFreestyleRepoData(repoName: string, path = ""): Promi
       branches,
       commits,
       files,
+      fileContent,
     };
   } catch {
     return null;

@@ -20,13 +20,19 @@
   - `/api/repos/:owner/:repo?path=src` returns child file entries for the requested directory.
   - The code tab renders path breadcrumbs and clickable directory rows.
   - Browser-verified clicking `src` updates the file list to source files including `App.tsx` and `server.ts`.
+- Added a file contents viewer for live Freestyle files:
+  - `/api/repos/:owner/:repo?path=src/App.tsx` decodes the base64 file payload and returns `fileContent` (path/name/size/text).
+  - The code tab renders a monospace viewer with a header (filename + size) instead of the file list when `fileContent` is set.
+  - Files in the listing are now clickable (`openFile`) so the path can drill into a leaf file.
+  - Browser-verified end-to-end: click `src`, click `App.tsx`, breadcrumbs become `better-github / src / App.tsx` and the file source renders.
+  - Added an API test asserting `fileContent.text` for `src/App.tsx` contains `function App()`.
 
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add a file contents view for one live Freestyle file, starting with clicking `src/App.tsx`.
-Automated Verification: API/unit test for requesting a file path and returning its text content.
-Browser Verification: Click `src`, click `App.tsx`, and confirm the UI shows the file contents with a breadcrumb ending in `src / App.tsx`.
+Task: Render basic syntax-friendly affordances on the file viewer — show a line-numbered gutter for plaintext files like `src/App.tsx`.
+Automated Verification: Component or DOM-level test asserting the viewer renders one line-number cell per line of file text.
+Browser Verification: Open `src/App.tsx` and confirm a left-aligned line-number gutter is shown next to the source.
 
 
 ## Later
