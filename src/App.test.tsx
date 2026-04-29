@@ -293,6 +293,66 @@ describe("RunDetail", () => {
 
 		expect(html).toContain("No step details available yet");
 	});
+
+	test("renders Re-run button for completed runs (success)", () => {
+		const run: WorkflowRun = {
+			id: "test-run-completed",
+			workflowName: "CI",
+			repoOwner: "dexhorthy",
+			repoName: "better-github",
+			branch: "main",
+			commitSha: "completed123",
+			status: "success",
+			startedAt: "2024-01-01T10:00:00Z",
+			completedAt: "2024-01-01T10:05:00Z",
+		};
+
+		const html = renderToStaticMarkup(
+			<RunDetail run={run} onBack={() => {}} onRerun={() => {}} />,
+		);
+
+		expect(html).toContain('data-testid="rerun-button"');
+		expect(html).toContain("Re-run");
+	});
+
+	test("renders Re-run button for failed runs", () => {
+		const run: WorkflowRun = {
+			id: "test-run-failed",
+			workflowName: "CI",
+			repoOwner: "dexhorthy",
+			repoName: "better-github",
+			branch: "main",
+			commitSha: "failed123",
+			status: "failure",
+			startedAt: "2024-01-01T10:00:00Z",
+			completedAt: "2024-01-01T10:05:00Z",
+		};
+
+		const html = renderToStaticMarkup(
+			<RunDetail run={run} onBack={() => {}} onRerun={() => {}} />,
+		);
+
+		expect(html).toContain('data-testid="rerun-button"');
+	});
+
+	test("does not render Re-run button for in_progress runs", () => {
+		const run: WorkflowRun = {
+			id: "test-run-progress",
+			workflowName: "CI",
+			repoOwner: "dexhorthy",
+			repoName: "better-github",
+			branch: "main",
+			commitSha: "progress123",
+			status: "in_progress",
+			startedAt: "2024-01-01T10:00:00Z",
+		};
+
+		const html = renderToStaticMarkup(
+			<RunDetail run={run} onBack={() => {}} onRerun={() => {}} />,
+		);
+
+		expect(html).not.toContain('data-testid="rerun-button"');
+	});
 });
 
 describe("WorkflowEditor", () => {

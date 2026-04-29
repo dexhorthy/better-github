@@ -225,15 +225,23 @@
   - Added API tests for workflows endpoint (returns files, requires auth).
   - All new tests pass; biome lint is clean.
 
+- Added re-run workflow button for completed runs:
+  - POST `/api/repos/:owner/:repo/actions/runs` now accepts `rerunOf` parameter to re-run a workflow from a previous run ID.
+  - Server looks up original run's branch and commitSha when `rerunOf` is provided.
+  - `RunDetail` component renders "Re-run" button for completed runs (success/failure/cancelled).
+  - Added API tests: rerun creates new run with same branch/commit; invalid rerunOf returns 404.
+  - Added unit tests for Re-run button rendering in RunDetail component.
+  - Fixed `collectTrackedTextFiles` to skip files deleted from working tree but still in git index.
+  - All 71 tests pass; biome lint is clean.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Add re-run workflow button for completed runs.
-Automated Verification: API test for POST /api/repos/:owner/:repo/actions/runs with runId parameter to re-run.
-Browser Verification: Users can click "Re-run" button on completed workflow runs to trigger a new run with the same workflow.
+Task: Add workflow file editing (save changes back to Freestyle Git).
+Automated Verification: API test for PUT /api/repos/:owner/:repo/workflows/:name endpoint.
+Browser Verification: Users can edit workflow YAML in the WorkflowEditor and save changes.
 
 ## Next Up
-- Add workflow file editing (save changes back to Freestyle Git)
 - Fixed: magic-link email pointed at `/api/auth/verify?token=...` (raw JSON page) instead of `/?token=...` (frontend auto-verify). Updated `sendMagicLinkEmail` in `src/auth-core.ts` to link to the frontend root so the React handler completes the sign-in. TODO: add a regression test asserting the email body contains `${baseUrl}/?token=` and not `/api/auth/verify`.
 
 ## Long Term Goals

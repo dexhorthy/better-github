@@ -336,6 +336,77 @@ describe("workflow runs api", () => {
 		);
 		expect(res.status).toBe(401);
 	});
+
+	test("POST /api/repos/:owner/:repo/actions/runs with rerunOf creates a new run with same branch/commit", async () => {
+		const token = await getTestToken();
+
+		// Create an initial workflow run
+		const createRes = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ branch: "feature-branch", commitSha: "abc123" }),
+			},
+		);
+		expect(createRes.status).toBe(201);
+		const { id: originalRunId } = (await createRes.json()) as { id: string };
+
+		// Re-run the workflow
+		const rerunRes = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ rerunOf: originalRunId }),
+			},
+		);
+		expect(rerunRes.status).toBe(201);
+		const { id: newRunId } = (await rerunRes.json()) as { id: string };
+
+		// Verify the new run has a different ID
+		expect(newRunId).not.toBe(originalRunId);
+
+		// Fetch the new run and verify it inherited branch/commit from original
+		const getRes = await app.request(
+			`/api/repos/dexhorthy/better-github/actions/runs/${newRunId}`,
+			{
+				headers: { Authorization: `Bearer ${token}` },
+			},
+		);
+		expect(getRes.status).toBe(200);
+		const newRun = (await getRes.json()) as {
+			id: string;
+			branch: string;
+			commitSha: string;
+		};
+		expect(newRun.branch).toBe("feature-branch");
+		expect(newRun.commitSha).toBe("abc123");
+	});
+
+	test("POST /api/repos/:owner/:repo/actions/runs with invalid rerunOf returns 404", async () => {
+		const token = await getTestToken();
+		const res = await app.request(
+			"/api/repos/dexhorthy/better-github/actions/runs",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ rerunOf: "nonexistent-run-id" }),
+			},
+		);
+		expect(res.status).toBe(404);
+		const body = (await res.json()) as { error: string };
+		expect(body.error).toBe("Original run not found");
+	});
 });
 
 describe("webhook api", () => {

@@ -217,14 +217,25 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 		branch?: string;
 		commitSha?: string;
 		workflowContent?: string;
+		rerunOf?: string;
 	};
 
-	const branch = body.branch ?? "main";
-	const commitSha = body.commitSha ?? "manual";
+	let branch = body.branch ?? "main";
+	let commitSha = body.commitSha ?? "manual";
+	let workflowContent = body.workflowContent;
 
-	const workflowContent =
-		body.workflowContent ??
-		`name: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Checkout\n        uses: checkout\n      - name: Install\n        run: bun install\n      - name: Test\n        run: bun test`;
+	if (body.rerunOf) {
+		const originalRun = await getWorkflowRun(body.rerunOf);
+		if (!originalRun) {
+			return c.json({ error: "Original run not found" }, 404);
+		}
+		branch = originalRun.branch;
+		commitSha = originalRun.commitSha;
+	}
+
+	if (!workflowContent) {
+		workflowContent = `name: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Checkout\n        uses: checkout\n      - name: Install\n        run: bun install\n      - name: Test\n        run: bun test`;
+	}
 
 	const workflow = parseWorkflow(workflowContent);
 	if (!workflow) {

@@ -609,15 +609,23 @@ export function RunDetail({
 	run,
 	onBack,
 	onCancel,
+	onRerun,
 	cancelling = false,
+	rerunning = false,
 }: {
 	run: WorkflowRun;
 	onBack: () => void;
 	onCancel?: () => void;
+	onRerun?: () => void;
 	cancelling?: boolean;
+	rerunning?: boolean;
 }) {
 	const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
 	const isCancellable = run.status === "queued" || run.status === "in_progress";
+	const isRerunnable =
+		run.status === "success" ||
+		run.status === "failure" ||
+		run.status === "cancelled";
 
 	const toggleStep = (stepName: string) => {
 		setExpandedSteps((prev) => {
@@ -662,6 +670,18 @@ export function RunDetail({
 					>
 						<StopCircle size={16} aria-hidden="true" />
 						{cancelling ? "Cancelling..." : "Cancel"}
+					</button>
+				)}
+				{isRerunnable && onRerun && (
+					<button
+						type="button"
+						className="rerun-button"
+						onClick={onRerun}
+						disabled={rerunning}
+						data-testid="rerun-button"
+					>
+						<Play size={16} aria-hidden="true" />
+						{rerunning ? "Re-running..." : "Re-run"}
 					</button>
 				)}
 			</div>
@@ -753,6 +773,7 @@ export function ActionsTab({
 	const [state, setState] = useState<WorkflowRunsState>({ status: "loading" });
 	const [triggering, setTriggering] = useState(false);
 	const [cancelling, setCancelling] = useState(false);
+	const [rerunning, setRerunning] = useState(false);
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 	const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
 	const [view, setView] = useState<ActionsView>("runs");
@@ -872,6 +893,30 @@ export function ActionsTab({
 		}
 	};
 
+	const rerunWorkflow = async (runId: string) => {
+		setRerunning(true);
+		try {
+			const response = await fetch(
+				`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${auth.token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ rerunOf: runId }),
+				},
+			);
+			if (response.ok) {
+				const newRun = (await response.json()) as { id: string };
+				setSelectedRunId(newRun.id);
+				fetchRuns();
+			}
+		} finally {
+			setRerunning(false);
+		}
+	};
+
 	if (view === "workflows") {
 		return (
 			<section className="actions-tab" data-testid="actions-tab">
@@ -892,7 +937,9 @@ export function ActionsTab({
 					run={selectedRun}
 					onBack={() => setSelectedRunId(null)}
 					onCancel={() => cancelRun(selectedRun.id)}
+					onRerun={() => rerunWorkflow(selectedRun.id)}
 					cancelling={cancelling}
+					rerunning={rerunning}
 				/>
 			</section>
 		);

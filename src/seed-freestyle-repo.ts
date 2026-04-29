@@ -17,14 +17,17 @@ export async function collectTrackedTextFiles(): Promise<TrackedFile[]> {
 	const output = await $`git ls-files -z`.text();
 	const paths = output.split("\0").filter(Boolean);
 
-	const files = await Promise.all(
-		paths.map(async (path) => ({
-			path,
-			content: await Bun.file(path).text(),
-		})),
+	const results = await Promise.all(
+		paths.map(async (path) => {
+			const file = Bun.file(path);
+			if (!(await file.exists())) return null;
+			return { path, content: await file.text() };
+		}),
 	);
 
-	return files.sort((a, b) => a.path.localeCompare(b.path));
+	return results
+		.filter((f): f is TrackedFile => f !== null)
+		.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export async function ensureFreestyleRepoWithContent(

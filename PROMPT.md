@@ -7,6 +7,8 @@ you are working on cloning github
 4. env vars in .env
 5. if you run out of ideas, use websearch to search the web for github docs, keep your findings in research_findings/
 6. push changes to both origin and upstream remotes
+7. optional - if you need user action like dns config or api keys created, add to ASKS_FOR_HUMAN.md
+8. this repo is public, never commit any sensitive keys or ids to this repo, always in .env
 </guidance>
 
 <instructions>
