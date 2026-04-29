@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LineNumberedCode, readPathFromSearch } from "./App";
+import { LineNumberedCode, buildPathSearch, readPathFromSearch } from "./App";
 
 describe("LineNumberedCode", () => {
   test("renders one line-number cell per line of file text", () => {
@@ -29,5 +29,27 @@ describe("readPathFromSearch", () => {
 
   test("trims surrounding slashes so the API receives a clean path", () => {
     expect(readPathFromSearch("?path=/src/App.tsx/")).toBe("src/App.tsx");
+  });
+});
+
+describe("buildPathSearch", () => {
+  test("returns empty string when path is empty so the URL has no query", () => {
+    expect(buildPathSearch("")).toBe("");
+  });
+
+  test("encodes a directory path", () => {
+    expect(buildPathSearch("src")).toBe("?path=src");
+  });
+
+  test("encodes a nested file path", () => {
+    expect(buildPathSearch("src/App.tsx")).toBe("?path=src%2FApp.tsx");
+  });
+
+  test("trims surrounding slashes before encoding", () => {
+    expect(buildPathSearch("/src/")).toBe("?path=src");
+  });
+
+  test("round trips through readPathFromSearch", () => {
+    expect(readPathFromSearch(buildPathSearch("src/App.tsx"))).toBe("src/App.tsx");
   });
 });

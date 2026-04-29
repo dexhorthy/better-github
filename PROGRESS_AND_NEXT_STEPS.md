@@ -35,18 +35,22 @@
   - `App` seeds its `path` state from `window.location.search` so deep links open the matching directory or file directly.
   - Added unit tests covering empty, directory, nested file, and slash-trimmed query strings.
   - Browser-verified `http://127.0.0.1:5173/?path=src/App.tsx` loads the file viewer with the `better-github / src / App.tsx` breadcrumb and `function App()` source on first paint.
+- Synced `window.location.search` to the active `path` state and supported back/forward:
+  - Added `buildPathSearch(path)` helper that produces `?path=<encoded>` (or empty for root).
+  - `App` pushes a history entry with the encoded path whenever `path` changes, and listens to `popstate` to restore prior path on back/forward.
+  - Added unit tests for `buildPathSearch` covering empty/dir/nested/slash-trimmed inputs and a round trip with `readPathFromSearch`.
+  - Browser-verified clicking `src` then `App.tsx` updates the URL to `?path=src%2FApp.tsx`; pressing back restores `?path=src` with the directory listing, and a second back returns to root.
 
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Sync the URL when the user navigates so clicking directories or files updates `window.location.search` (and back/forward restores the previous path) — pairs with the deep-link initialization just shipped.
-Automated Verification: Test that updating `path` via the existing setters pushes a matching `?path=...` history entry, and that a `popstate` event restores the previous path.
-Browser Verification: Click `src` then `App.tsx`, confirm the URL becomes `/?path=src/App.tsx`, then press the browser back button and confirm the directory listing returns.
+Task: Add a README that documents how to run the app locally with a single bun command (covering API + Vite dev server, Freestyle env vars, and the seed step).
+Automated Verification: Add a small test or script that checks `README.md` exists and documents `bun run dev`, `bun run api`, and the required `FREESTYLE_API_KEY` / `FREESTYLE_REPO_ID` env vars.
+Browser Verification: Following the README from a fresh clone successfully starts the app at `http://127.0.0.1:5173/` and renders the live repo overview.
 
 
 ## Next Up
 
-- Add README that instructs how to run the app locally with a single bun command
 - Add playwright test suite for UI integration tests to regular testing flow
 
 ## Long Term Goals

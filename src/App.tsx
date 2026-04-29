@@ -42,6 +42,11 @@ export function readPathFromSearch(search: string): string {
   return value.replace(/^\/+|\/+$/g, "");
 }
 
+export function buildPathSearch(path: string): string {
+  const trimmed = path.replace(/^\/+|\/+$/g, "");
+  return trimmed ? `?path=${encodeURIComponent(trimmed)}` : "";
+}
+
 export function LineNumberedCode({ text }: { text: string }) {
   const lines = text.split("\n");
 
@@ -66,6 +71,21 @@ function App() {
   const [path, setPath] = useState(() =>
     typeof window === "undefined" ? "" : readPathFromSearch(window.location.search),
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const desired = buildPathSearch(path);
+    if (window.location.search !== desired) {
+      window.history.pushState({ path }, "", `${window.location.pathname}${desired}`);
+    }
+  }, [path]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handle = () => setPath(readPathFromSearch(window.location.search));
+    window.addEventListener("popstate", handle);
+    return () => window.removeEventListener("popstate", handle);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams();
