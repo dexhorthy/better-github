@@ -51,6 +51,7 @@ export type FreestyleRepoData = {
   commits: GitCommit[];
   files: { type: "directory" | "file"; name: string; lastCommit: string; updatedAt: string }[];
   fileContent?: FileContent;
+  readme?: { text: string };
 };
 
 function makeGitUser(name: string, email: string): GitUser {
@@ -68,12 +69,13 @@ export async function fetchFreestyleRepoData(repoName: string, path = ""): Promi
 
     const repo = freestyle.git.repos.ref({ repoId });
 
-    const [defaultBranchResult, branchesResult, commitsResult, contentsResult] =
+    const [defaultBranchResult, branchesResult, commitsResult, contentsResult, readmeResult] =
       await Promise.allSettled([
         repo.branches.getDefaultBranch(),
         repo.branches.list(),
         repo.commits.list({ limit: 10 }),
         repo.contents.get({ path }),
+        path === "" ? repo.contents.get({ path: "README.md" }) : Promise.reject(new Error("skip")),
       ]);
 
     const defaultBranch =
@@ -126,6 +128,11 @@ export async function fetchFreestyleRepoData(repoName: string, path = ""): Promi
     const latestCommit = commits[0];
     const updatedAt = latestCommit?.committedAt ?? new Date().toISOString();
 
+    let readme: { text: string } | undefined;
+    if (readmeResult.status === "fulfilled" && readmeResult.value.type === "file") {
+      readme = { text: Buffer.from(readmeResult.value.content, "base64").toString("utf8") };
+    }
+
     return {
       repository: {
         defaultBranch,
@@ -136,6 +143,7 @@ export async function fetchFreestyleRepoData(repoName: string, path = ""): Promi
       commits,
       files,
       fileContent,
+      readme,
     };
   } catch {
     return null;

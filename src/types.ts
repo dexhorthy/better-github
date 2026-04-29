@@ -62,4 +62,5 @@ export type RepositoryOverview = {
     updatedAt: string;
   }[];
   fileContent?: FileContent;
+  readme?: { text: string };
 };

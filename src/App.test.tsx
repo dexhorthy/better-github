@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LineNumberedCode, RepoHomeLink, buildPathSearch, readPathFromSearch } from "./App";
+import { LineNumberedCode, ReadmePreview, RepoHomeLink, buildPathSearch, readPathFromSearch } from "./App";
+
+describe("ReadmePreview", () => {
+  test("renders readme text inside data-testid=repo-readme", () => {
+    const html = renderToStaticMarkup(<ReadmePreview text="# Hello\nbun run start" />);
+
+    expect(html).toContain('data-testid="repo-readme"');
+    expect(html).toContain("# Hello");
+    expect(html).toContain("bun run start");
+  });
+});
 
 describe("LineNumberedCode", () => {
   test("renders one line-number cell per line of file text", () => {

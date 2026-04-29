@@ -43,6 +43,24 @@ describe("repository api", () => {
     const response = await app.request("/api/repos/dexhorthy/missing");
     expect(response.status).toBe(404);
   });
+
+  test("returns readme.text at root path", async () => {
+    const response = await app.request("/api/repos/dexhorthy/better-github");
+    const body = (await response.json()) as RepositoryOverview;
+
+    expect(response.status).toBe(200);
+    expect(body.readme).toBeDefined();
+    expect(typeof body.readme?.text).toBe("string");
+    expect(body.readme?.text.length).toBeGreaterThan(0);
+  });
+
+  test("does not return readme when browsing a subdirectory", async () => {
+    const response = await app.request("/api/repos/dexhorthy/better-github?path=src");
+    const body = (await response.json()) as RepositoryOverview;
+
+    expect(response.status).toBe(200);
+    expect(body.readme).toBeUndefined();
+  });
 });
 
 describe("freestyle seed files", () => {

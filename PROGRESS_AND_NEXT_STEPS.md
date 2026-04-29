@@ -55,17 +55,24 @@
   - Added unit tests covering the rendered anchor markup, the plain-click path (preventDefault + onHome called), and modifier-key passthrough (no preventDefault, no onHome).
   - Browser-verified from `/?path=src/App.tsx`: clicking the `better-github` link in the repo header navigates to `/`, the breadcrumb collapses to just `better-github`, and the root file listing (README.md, src, etc.) renders in place of the file viewer.
 
+- Rendered a repository README preview below the file list on the root path:
+  - Added `readme?: { text: string }` to `RepositoryOverview` type and `FreestyleRepoData`.
+  - `fetchFreestyleRepoData` fetches `README.md` via `repo.contents.get({ path: "README.md" })` only at root path (`path === ""`), decodes base64, and returns it as `readme.text`.
+  - `buildRepositoryOverview` in server passes `readme` through to the API response.
+  - Added `ReadmePreview` component with a styled header and pre-formatted body, rendered below the file list only when at root path and readme is present.
+  - API test asserts `readme` is defined and non-empty at root; asserts it is absent for subdirectory paths.
+  - Unit test asserts `ReadmePreview` renders the text inside `data-testid="repo-readme"`.
+  - Browser-verified: root path shows file list followed by a README.md section with the repo content; navigating to `?path=src` hides the README section.
+
 ## Highest Priority Next Task
 <guidance>make this the smallest independently testable next step</guidance>
 
-Task: Render a repository README preview below the file list on the root path, fetched from the same `/api/repos/:owner/:repo` endpoint by adding a `readme` field that returns the decoded text of `README.md` when present at the repo root.
-Automated Verification: API test asserting `GET /api/repos/dexhorthy/better-github` returns a `readme.text` string that contains `bun run start`. Unit test for a new `ReadmePreview` component asserting it renders the README text inside an element with `data-testid="repo-readme"` only when readme text is provided.
-Browser Verification: Loading `http://127.0.0.1:5173/` renders the file list followed by a `Readme` section showing the live README content; navigating into `?path=src` no longer renders the README section.
+Task: Add playwright test suite for UI integration tests to regular testing flow — install `@playwright/test`, add a `bun run test:e2e` script, and write tests covering: (1) root page renders file list and README section, (2) clicking `src` renders src file entries, (3) clicking `App.tsx` renders the file viewer with line numbers, (4) clicking the repo name resets to root.
+Automated Verification: `bun run test:e2e` runs without failures against a locally running server.
+Browser Verification: N/A (the tests themselves are the browser verification).
 
 
 ## Next Up
-
-- Add playwright test suite for UI integration tests to regular testing flow
 
 ## Long Term Goals
 

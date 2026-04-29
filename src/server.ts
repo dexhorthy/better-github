@@ -3,8 +3,33 @@ import { serveStatic } from "hono/bun";
 import { fetchFreestyleRepoData } from "./freestyle-git";
 import { branches, commits, getFixtureFilesForPath, pullRequests, repositories } from "./data";
 import type { RepositoryOverview } from "./types";
+import type { FreestyleRepoData } from "./freestyle-git";
 
 export const app = new Hono();
+
+function buildRepositoryOverview(
+  fixture: (typeof repositories)[number],
+  path: string,
+  liveData: FreestyleRepoData | null,
+): RepositoryOverview {
+  return {
+    repository: liveData
+      ? {
+          ...fixture,
+          defaultBranch: liveData.repository.defaultBranch,
+          visibility: liveData.repository.visibility,
+          updatedAt: liveData.repository.updatedAt,
+        }
+      : fixture,
+    branches: liveData?.branches.length ? liveData.branches : branches,
+    commits: liveData?.commits.length ? liveData.commits : commits,
+    pullRequests,
+    path,
+    files: liveData?.fileContent ? [] : liveData?.files.length ? liveData.files : getFixtureFilesForPath(path),
+    fileContent: liveData?.fileContent,
+    readme: liveData?.readme,
+  };
+}
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
@@ -18,26 +43,7 @@ app.get("/api/repos/:owner/:repo", async (c) => {
   }
 
   const liveData = await fetchFreestyleRepoData(repo, path);
-  const fixtureFiles = getFixtureFilesForPath(path);
-
-  const overview: RepositoryOverview = {
-    repository: liveData
-      ? {
-          ...fixture,
-          defaultBranch: liveData.repository.defaultBranch,
-          visibility: liveData.repository.visibility,
-          updatedAt: liveData.repository.updatedAt,
-        }
-      : fixture,
-    branches: liveData?.branches.length ? liveData.branches : branches,
-    commits: liveData?.commits.length ? liveData.commits : commits,
-    pullRequests,
-    path,
-    files: liveData?.fileContent ? [] : liveData?.files.length ? liveData.files : fixtureFiles,
-    fileContent: liveData?.fileContent,
-  };
-
-  return c.json(overview);
+  return c.json(buildRepositoryOverview(fixture, path, liveData));
 });
 
 app.use("/*", serveStatic({ root: "./dist" }));

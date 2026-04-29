@@ -64,6 +64,18 @@ export function RepoHomeLink({ name, onHome }: { name: string; onHome: () => voi
   );
 }
 
+export function ReadmePreview({ text }: { text: string }) {
+  return (
+    <div className="readme-preview" data-testid="repo-readme">
+      <div className="readme-header">
+        <BookOpen size={16} aria-hidden="true" />
+        <strong>README.md</strong>
+      </div>
+      <pre className="readme-body">{text}</pre>
+    </div>
+  );
+}
+
 export function LineNumberedCode({ text }: { text: string }) {
   const lines = text.split("\n");
 
@@ -132,7 +144,7 @@ function App() {
     return <main className="app-shell loading">{state.message}</main>;
   }
 
-  const { repository, branches, commits, files, pullRequests, fileContent } = state.data;
+  const { repository, branches, commits, files, pullRequests, fileContent, readme } = state.data;
   const latestCommit = commits[0];
   const pathSegments = state.data.path.split("/").filter(Boolean);
   const openDirectory = (name: string) => setPath(path ? `${path}/${name}` : name);
@@ -245,29 +257,32 @@ function App() {
               <LineNumberedCode text={fileContent.text} />
             </div>
           ) : (
-            <div className="file-list">
-              {files.map((item) => {
-                const Icon = item.type === "directory" ? Folder : File;
-                const rowName =
-                  item.type === "directory" ? (
-                    <button className="file-link" type="button" onClick={() => openDirectory(item.name)}>
-                      {item.name}
-                    </button>
-                  ) : (
-                    <button className="file-link" type="button" onClick={() => openFile(item.name)}>
-                      {item.name}
-                    </button>
+            <>
+              <div className="file-list">
+                {files.map((item) => {
+                  const Icon = item.type === "directory" ? Folder : File;
+                  const rowName =
+                    item.type === "directory" ? (
+                      <button className="file-link" type="button" onClick={() => openDirectory(item.name)}>
+                        {item.name}
+                      </button>
+                    ) : (
+                      <button className="file-link" type="button" onClick={() => openFile(item.name)}>
+                        {item.name}
+                      </button>
+                    );
+                  return (
+                    <div className="file-row" key={item.name}>
+                      <Icon size={18} aria-hidden="true" />
+                      {rowName}
+                      <span>{item.lastCommit}</span>
+                      <time dateTime={item.updatedAt}>{timeAgo(item.updatedAt)}</time>
+                    </div>
                   );
-                return (
-                  <div className="file-row" key={item.name}>
-                    <Icon size={18} aria-hidden="true" />
-                    {rowName}
-                    <span>{item.lastCommit}</span>
-                    <time dateTime={item.updatedAt}>{timeAgo(item.updatedAt)}</time>
-                  </div>
-                );
-              })}
-            </div>
+                })}
+              </div>
+              {readme && !path && <ReadmePreview text={readme.text} />}
+            </>
           )}
         </section>
 
