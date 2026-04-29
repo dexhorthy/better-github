@@ -1,5 +1,10 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import { rowToWorkflowRun, type WorkflowRunRow } from "./workflow-run-row";
+import {
+	rowToWorkflowRun,
+	type WorkflowRunRepository,
+	type WorkflowRunRow,
+	type WorkflowRunUpdates,
+} from "./workflow-run-row";
 import type { WorkflowRun } from "./workflows";
 
 export async function listWorkflowRunsD1(
@@ -69,9 +74,7 @@ export async function insertWorkflowRunD1(
 export async function updateWorkflowRunD1(
 	db: D1Database,
 	id: string,
-	updates: Partial<
-		Pick<WorkflowRun, "status" | "conclusion" | "completedAt" | "logs" | "steps">
-	>,
+	updates: WorkflowRunUpdates,
 ): Promise<void> {
 	await db
 		.prepare(
@@ -93,4 +96,13 @@ export async function updateWorkflowRunD1(
 			id,
 		)
 		.run();
+}
+
+export function makeD1WorkflowRunRepo(db: D1Database): WorkflowRunRepository {
+	return {
+		insert: (run) => insertWorkflowRunD1(db, run),
+		update: (id, updates) => updateWorkflowRunD1(db, id, updates),
+		get: (id) => getWorkflowRunD1(db, id),
+		list: (owner, repo, limit) => listWorkflowRunsD1(db, owner, repo, limit),
+	};
 }

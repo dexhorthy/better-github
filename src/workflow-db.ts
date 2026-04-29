@@ -1,5 +1,10 @@
 import { SQL } from "bun";
-import { rowToWorkflowRun, type WorkflowRunRow } from "./workflow-run-row";
+import {
+	rowToWorkflowRun,
+	type WorkflowRunRepository,
+	type WorkflowRunRow,
+	type WorkflowRunUpdates,
+} from "./workflow-run-row";
 import type { WorkflowRun } from "./workflows";
 
 const DATABASE_URL =
@@ -52,12 +57,7 @@ export async function insertWorkflowRun(run: WorkflowRun): Promise<void> {
 
 export async function updateWorkflowRun(
 	id: string,
-	updates: Partial<
-		Pick<
-			WorkflowRun,
-			"status" | "conclusion" | "completedAt" | "logs" | "steps"
-		>
-	>,
+	updates: WorkflowRunUpdates,
 ): Promise<void> {
 	await ensureWorkflowRunsTable();
 	const stepsJson = updates.steps ? JSON.stringify(updates.steps) : null;
@@ -95,3 +95,10 @@ export async function listWorkflowRuns(
 
 	return rows.map(rowToWorkflowRun);
 }
+
+export const postgresWorkflowRunRepo: WorkflowRunRepository = {
+	insert: insertWorkflowRun,
+	update: updateWorkflowRun,
+	get: getWorkflowRun,
+	list: listWorkflowRuns,
+};

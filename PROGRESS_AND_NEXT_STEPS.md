@@ -365,6 +365,14 @@
   - End-to-end verified: `bun run seed:freestyle better-github` pushed commit `f085cfa` (66 files) and `Push webhook → 200` returned `triggered: [{CI}, {Deploy}]` from the deployed Worker, confirming both `.better-github/workflows/ci.yml` and `deploy.yml` queued runs in remote D1 without any manual curl.
   - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
 
+- Introduced `WorkflowRunRepository` seam so route handlers no longer import runtime-specific functions:
+  - Added `WorkflowRunRepository` interface and `WorkflowRunUpdates` type to `src/workflow-run-row.ts` (alongside the existing row mapper) — `insert`, `update(id, updates)`, `get(id)`, `list(owner, repo, limit?)`.
+  - `src/workflow-db.ts` now exports a `postgresWorkflowRunRepo` singleton implementing the interface; the legacy named functions remain so the existing `src/workflow-db.test.ts` integration tests against real Postgres are unchanged.
+  - `src/workflow-db-d1.ts` exports `makeD1WorkflowRunRepo(db)` factory implementing the same interface.
+  - `src/server.ts` switched from importing `getWorkflowRun`/`insertWorkflowRun`/etc. to a single `runRepo` import; `src/worker.ts` constructs a `runRepo` per request from `c.env.DB` (and once inside `startWorkflowExecution`).
+  - Both runtimes now call through the same shape (`runRepo.get(id)`, `runRepo.update(id, updates)` …); switching adapters is one import change.
+  - All 112 unit tests pass; biome check and `tsc --noEmit` are clean.
+
 - Consolidated workflow run row mapping into `src/workflow-run-row.ts`:
   - Removed the inline `parseSteps`, `WorkflowRunRow` type, and `workflowRunFromRow` from `src/workflow-db.ts`; it now imports `rowToWorkflowRun` and `WorkflowRunRow` from `workflow-run-row.ts` so the Postgres adapter shares the same row mapper as the D1 adapter (`src/workflow-db-d1.ts`).
   - Updated `src/worker.test.ts` to import `getWorkflowRunD1`/`insertWorkflowRunD1`/`listWorkflowRunsD1` from `./workflow-db-d1` (their actual home) instead of re-exporting through `./worker`.
@@ -381,10 +389,9 @@
 
 Surfaced via `/improve-codebase-architecture`. Ordered by leverage; #1 unblocks #2.
 
-1. **Unify workflow persistence behind a `WorkflowRunRepository` seam.** *(partially done)*
+1. **Unify workflow persistence behind a `WorkflowRunRepository` seam.** *(done)*
    - Files: `src/workflow-db.ts`, `src/workflow-db-d1.ts`, `src/workflow-run-row.ts`.
-   - First step landed: `workflow-db.ts` no longer re-implements `parseSteps`/`workflowRunFromRow`/`WorkflowRunRow` — both adapters now share `rowToWorkflowRun` from `workflow-run-row.ts`.
-   - Still open: introduce a named `WorkflowRunRepository` interface so `server.ts` and `worker.ts` stop importing the specific runtime functions (`getWorkflowRun` vs `getWorkflowRunD1`) and call through one seam.
+   - `workflow-run-row.ts` now exports `WorkflowRunRepository` + `WorkflowRunUpdates`. `workflow-db.ts` exposes a `postgresWorkflowRunRepo` singleton; `workflow-db-d1.ts` exposes a `makeD1WorkflowRunRepo(db)` factory. `server.ts` and `worker.ts` go through the seam (`runRepo.get/list/insert/update`) instead of importing runtime-specific functions.
 
 2. **Collapse the duplicated route table in `server.ts` and `worker.ts`.**
    - Files: `src/server.ts` (394), `src/worker.ts` (576).

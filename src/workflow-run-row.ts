@@ -30,6 +30,17 @@ export function parseSteps(
 	}
 }
 
+export type WorkflowRunUpdates = Partial<
+	Pick<WorkflowRun, "status" | "conclusion" | "completedAt" | "logs" | "steps">
+>;
+
+export interface WorkflowRunRepository {
+	insert(run: WorkflowRun): Promise<void>;
+	update(id: string, updates: WorkflowRunUpdates): Promise<void>;
+	get(id: string): Promise<WorkflowRun | null>;
+	list(owner: string, repo: string, limit?: number): Promise<WorkflowRun[]>;
+}
+
 export function rowToWorkflowRun(row: WorkflowRunRow): WorkflowRun {
 	return {
 		id: row.id,

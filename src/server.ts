@@ -17,12 +17,7 @@ import {
 	handleMessage,
 	handleOpen,
 } from "./websocket";
-import {
-	getWorkflowRun,
-	insertWorkflowRun,
-	listWorkflowRuns,
-	updateWorkflowRun,
-} from "./workflow-db";
+import { postgresWorkflowRunRepo as runRepo } from "./workflow-db";
 import {
 	executeWorkflowRun,
 	parseWorkflow,
@@ -37,8 +32,8 @@ async function updateAndBroadcastRun(
 	runId: string,
 	updates: Partial<WorkflowRun>,
 ) {
-	await updateWorkflowRun(runId, updates);
-	const run = await getWorkflowRun(runId);
+	await runRepo.update(runId, updates);
+	const run = await runRepo.get(runId);
 	if (run) {
 		broadcastRunUpdate(run);
 	}
@@ -126,7 +121,7 @@ app.post("/api/webhooks/push", async (c) => {
 			startedAt: new Date().toISOString(),
 		};
 
-		await insertWorkflowRun(run);
+		await runRepo.insert(run);
 		triggered.push({ id: runId, workflowName: workflow.name });
 
 		// Execute in background
@@ -169,7 +164,7 @@ app.get(
 	requireAuth,
 	async (c) => {
 		const { runId } = c.req.param();
-		const run = await getWorkflowRun(runId);
+		const run = await runRepo.get(runId);
 		if (!run) return c.json({ message: "Run not found" }, 404);
 		return c.json(run);
 	},
@@ -177,7 +172,7 @@ app.get(
 
 app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();
-	const runs = await listWorkflowRuns(owner, repo);
+	const runs = await runRepo.list(owner, repo);
 	return c.json(runs);
 });
 
@@ -195,7 +190,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	let workflowContent = body.workflowContent;
 
 	if (body.rerunOf) {
-		const originalRun = await getWorkflowRun(body.rerunOf);
+		const originalRun = await runRepo.get(body.rerunOf);
 		if (!originalRun) {
 			return c.json({ error: "Original run not found" }, 404);
 		}
@@ -224,7 +219,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 		startedAt: new Date().toISOString(),
 	};
 
-	await insertWorkflowRun(run);
+	await runRepo.insert(run);
 
 	// Execute in background
 	(async () => {
@@ -264,7 +259,7 @@ app.post(
 	requireAuth,
 	async (c) => {
 		const { runId } = c.req.param();
-		const run = await getWorkflowRun(runId);
+		const run = await runRepo.get(runId);
 		if (!run) return c.json({ error: "Run not found" }, 404);
 		if (run.status !== "queued" && run.status !== "in_progress") {
 			return c.json({ error: "Run is not cancellable" }, 400);

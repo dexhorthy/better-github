@@ -16,12 +16,7 @@ import {
 import { buildRepositoryOverview } from "./repository-overview";
 import type { WorkflowStepResult } from "./types";
 import { verifyWebhookSignature } from "./webhook-signature";
-import {
-	getWorkflowRunD1,
-	insertWorkflowRunD1,
-	listWorkflowRunsD1,
-	updateWorkflowRunD1,
-} from "./workflow-db-d1";
+import { makeD1WorkflowRunRepo } from "./workflow-db-d1";
 import {
 	executeWorkflowRun,
 	parseWorkflow,
@@ -266,7 +261,7 @@ app.get(
 	requireAuth,
 	async (c) => {
 		const { runId } = c.req.param();
-		const run = await getWorkflowRunD1(c.env.DB, runId);
+		const run = await makeD1WorkflowRunRepo(c.env.DB).get(runId);
 		if (!run) return c.json({ message: "Run not found" }, 404);
 		return c.json(run);
 	},
@@ -274,7 +269,7 @@ app.get(
 
 app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 	const { owner, repo } = c.req.param();
-	const runs = await listWorkflowRunsD1(c.env.DB, owner, repo);
+	const runs = await makeD1WorkflowRunRepo(c.env.DB).list(owner, repo);
 	return c.json(runs);
 });
 
@@ -287,11 +282,12 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 		rerunOf?: string;
 	};
 
+	const runRepo = makeD1WorkflowRunRepo(c.env.DB);
 	let branch = body.branch ?? "main";
 	let commitSha = body.commitSha ?? "manual";
 
 	if (body.rerunOf) {
-		const originalRun = await getWorkflowRunD1(c.env.DB, body.rerunOf);
+		const originalRun = await runRepo.get(body.rerunOf);
 		if (!originalRun) {
 			return c.json({ error: "Original run not found" }, 404);
 		}
@@ -320,7 +316,7 @@ app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
 		startedAt: new Date().toISOString(),
 	};
 
-	await insertWorkflowRunD1(c.env.DB, run);
+	await runRepo.insert(run);
 	await broadcaster(run, c.env);
 
 	bridgeFreestyleEnv(c.env);
@@ -337,12 +333,12 @@ function startWorkflowExecution(
 	commitSha: string,
 	c?: { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } },
 ): Promise<void> {
-	const db = env.DB;
+	const runRepo = makeD1WorkflowRunRepo(env.DB);
 	const repoUrl = `https://git.freestyle.sh/${env.FREESTYLE_REPO_ID ?? ""}`;
 	const execPromise = (async () => {
 		try {
-			await updateWorkflowRunD1(db, runId, { status: "in_progress" });
-			const inProgress = await getWorkflowRunD1(db, runId);
+			await runRepo.update(runId, { status: "in_progress" });
+			const inProgress = await runRepo.get(runId);
 			if (inProgress) await broadcaster(inProgress, env);
 			const result = await workflowExecutor(
 				workflow,
@@ -361,24 +357,26 @@ function startWorkflowExecution(
 				: result.success
 					? "success"
 					: "failure";
-			await updateWorkflowRunD1(db, runId, {
+			await runRepo.update(runId, {
 				status,
 				conclusion,
 				completedAt: new Date().toISOString(),
 				logs: result.logs,
 				steps: result.steps,
 			});
-			const finalRun = await getWorkflowRunD1(db, runId);
+			const finalRun = await runRepo.get(runId);
 			if (finalRun) await broadcaster(finalRun, env);
 		} catch (err) {
 			console.error("workflow execution failed", err);
-			await updateWorkflowRunD1(db, runId, {
-				status: "failure",
-				conclusion: "failure",
-				completedAt: new Date().toISOString(),
-				logs: err instanceof Error ? err.message : String(err),
-			}).catch(() => {});
-			const failedRun = await getWorkflowRunD1(db, runId).catch(() => null);
+			await runRepo
+				.update(runId, {
+					status: "failure",
+					conclusion: "failure",
+					completedAt: new Date().toISOString(),
+					logs: err instanceof Error ? err.message : String(err),
+				})
+				.catch(() => {});
+			const failedRun = await runRepo.get(runId).catch(() => null);
 			if (failedRun) {
 				try {
 					await broadcaster(failedRun, env);
@@ -437,6 +435,7 @@ app.post("/api/webhooks/push", async (c) => {
 		return c.json({ message: "No workflows found", triggered: [] });
 	}
 
+	const runRepo = makeD1WorkflowRunRepo(c.env.DB);
 	const triggered: { id: string; workflowName: string }[] = [];
 	for (const wf of workflowFiles) {
 		const workflow = parseWorkflow(wf.content);
@@ -454,7 +453,7 @@ app.post("/api/webhooks/push", async (c) => {
 			status: "queued",
 			startedAt: new Date().toISOString(),
 		};
-		await insertWorkflowRunD1(c.env.DB, run);
+		await runRepo.insert(run);
 		await broadcaster(run, c.env);
 		triggered.push({ id: runId, workflowName: workflow.name });
 		startWorkflowExecution(c.env, runId, workflow, branch, commitSha, c);
@@ -468,19 +467,20 @@ app.post(
 	requireAuth,
 	async (c) => {
 		const { runId } = c.req.param();
-		const run = await getWorkflowRunD1(c.env.DB, runId);
+		const runRepo = makeD1WorkflowRunRepo(c.env.DB);
+		const run = await runRepo.get(runId);
 		if (!run) return c.json({ error: "Run not found" }, 404);
 		if (run.status !== "queued" && run.status !== "in_progress") {
 			return c.json({ error: "Run is not cancellable" }, 400);
 		}
 		requestCancellation(runId);
 		if (run.status === "queued") {
-			await updateWorkflowRunD1(c.env.DB, runId, {
+			await runRepo.update(runId, {
 				status: "cancelled",
 				conclusion: "cancelled",
 				completedAt: new Date().toISOString(),
 			});
-			const cancelled = await getWorkflowRunD1(c.env.DB, runId);
+			const cancelled = await runRepo.get(runId);
 			if (cancelled) await broadcaster(cancelled, c.env);
 		}
 		return c.json({ ok: true });
