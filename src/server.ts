@@ -1,7 +1,7 @@
-import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth";
+import { type AuthRouteVariables, registerAuthRoutes } from "./auth-routes";
 import {
 	deleteWorkflowFile,
 	fetchFreestyleRepoData,
@@ -30,7 +30,7 @@ type ServerBindings = Record<string, never>;
 
 export const app = new Hono<{
 	Bindings: ServerBindings;
-	Variables: RepositoryRouteVariables;
+	Variables: AuthRouteVariables & RepositoryRouteVariables;
 }>();
 
 async function updateAndBroadcastRun(
@@ -73,33 +73,11 @@ function startWorkflowExecution(
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
-app.post("/api/auth/request-link", async (c) => {
-	const body = (await c.req.json().catch(() => ({}))) as { email?: string };
-	const baseUrl = new URL(c.req.url).origin;
-	const result = await requestMagicLink(body.email ?? "", baseUrl);
-	if (!result.ok) return c.json({ error: result.error }, 400);
-	return c.json({ ok: true });
+const requireAuth = registerAuthRoutes(app, {
+	requestMagicLink: (_c, email, baseUrl) => requestMagicLink(email, baseUrl),
+	verifyMagicLink: (_c, token) => verifyMagicLink(token),
+	verifyToken: (_c, token) => verifyToken(token),
 });
-
-app.get("/api/auth/verify", async (c) => {
-	const token = c.req.query("token") ?? "";
-	const result = await verifyMagicLink(token);
-	if (!result.ok) return c.json({ error: result.error }, 401);
-	return c.json({ token: result.token, email: result.email });
-});
-
-const requireAuth: MiddlewareHandler<{
-	Bindings: ServerBindings;
-	Variables: RepositoryRouteVariables;
-}> = async (c, next) => {
-	const authHeader = c.req.header("Authorization");
-	const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-	if (!token) return c.json({ error: "Authentication required" }, 401);
-	const user = await verifyToken(token);
-	if (!user) return c.json({ error: "Invalid or expired token" }, 401);
-	c.set("user", user);
-	await next();
-};
 
 registerRepositoryRoutes(app, {
 	requireAuth,

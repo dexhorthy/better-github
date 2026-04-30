@@ -1,5 +1,5 @@
 // Core auth logic: JWT helpers, magic-link flow, and a DB interface.
-// Implementations of AuthDB are in auth.ts (Bun/Postgres) and worker.ts (D1).
+// Implementations of AuthDB are in auth.ts (Bun/Postgres) and auth-d1.ts (D1).
 
 const ALGORITHM = "HS256";
 const TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes

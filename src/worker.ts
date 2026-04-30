@@ -2,11 +2,11 @@ import type {
 	D1Database,
 	DurableObjectNamespace,
 } from "@cloudflare/workers-types";
-import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import type { MagicLinkResult, VerifyResult } from "./auth-core";
 import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth-core";
 import { makeD1AuthDb } from "./auth-d1";
+import { type AuthRouteVariables, registerAuthRoutes } from "./auth-routes";
 import {
 	deleteWorkflowFile,
 	fetchFreestyleRepoData,
@@ -101,9 +101,7 @@ export function resetWorkflowFileFetcher(): void {
 	workflowFileFetcher = fetchWorkflowFiles;
 }
 
-type Variables = {
-	user: { email: string };
-};
+type Variables = AuthRouteVariables;
 
 export const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -127,46 +125,27 @@ app.get("/ws", (c) => {
 	);
 });
 
-app.post("/api/auth/request-link", async (c) => {
-	const body = (await c.req.json().catch(() => ({}))) as { email?: string };
-	const baseUrl = new URL(c.req.url).origin;
-	const db = makeD1AuthDb(c.env.DB);
-	const jwtSecret = c.env.JWT_SECRET ?? "dev-secret-change-in-production";
-	const result: MagicLinkResult = await requestMagicLink(
-		db,
-		body.email ?? "",
-		baseUrl,
-		c.env.RESEND_API_KEY,
-		c.env.RESEND_API_DOMAN ?? "better-github.com",
-	);
-	// jwtSecret is used in verifyMagicLink, not requestMagicLink — silence unused var
-	void jwtSecret;
-	if (!result.ok) return c.json({ error: result.error }, 400);
-	return c.json({ ok: true });
+const requireAuth = registerAuthRoutes(app, {
+	async requestMagicLink(c, email, baseUrl): Promise<MagicLinkResult> {
+		const db = makeD1AuthDb(c.env.DB);
+		return requestMagicLink(
+			db,
+			email,
+			baseUrl,
+			c.env.RESEND_API_KEY,
+			c.env.RESEND_API_DOMAN ?? "better-github.com",
+		);
+	},
+	async verifyMagicLink(c, token): Promise<VerifyResult> {
+		const db = makeD1AuthDb(c.env.DB);
+		const jwtSecret = c.env.JWT_SECRET ?? "dev-secret-change-in-production";
+		return verifyMagicLink(db, token, jwtSecret);
+	},
+	async verifyToken(c, token) {
+		const jwtSecret = c.env.JWT_SECRET ?? "dev-secret-change-in-production";
+		return verifyToken(token, jwtSecret);
+	},
 });
-
-app.get("/api/auth/verify", async (c) => {
-	const token = c.req.query("token") ?? "";
-	const db = makeD1AuthDb(c.env.DB);
-	const jwtSecret = c.env.JWT_SECRET ?? "dev-secret-change-in-production";
-	const result: VerifyResult = await verifyMagicLink(db, token, jwtSecret);
-	if (!result.ok) return c.json({ error: result.error }, 401);
-	return c.json({ token: result.token, email: result.email });
-});
-
-const requireAuth: MiddlewareHandler<{
-	Bindings: Env;
-	Variables: Variables;
-}> = async (c, next) => {
-	const authHeader = c.req.header("Authorization");
-	const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-	if (!token) return c.json({ error: "Authentication required" }, 401);
-	const jwtSecret = c.env.JWT_SECRET ?? "dev-secret-change-in-production";
-	const user = await verifyToken(token, jwtSecret);
-	if (!user) return c.json({ error: "Invalid or expired token" }, 401);
-	c.set("user", user);
-	await next();
-};
 
 function startWorkflowExecution(
 	env: Env,

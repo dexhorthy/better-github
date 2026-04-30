@@ -18,13 +18,14 @@ See [DONE.md](./DONE.md) for the full chronological log. High-level summary:
 - Refactored persistence behind seams: `WorkflowRunRepository` (Postgres + D1 adapters) and `makeD1AuthDb` peer to the Bun/Postgres `AuthDB`; consolidated row mapping in `workflow-run-row.ts`.
 - Extracted shared workflow lifecycle helpers (`newQueuedRun`, `DEFAULT_WORKFLOW_CONTENT`, `deriveTerminalStatus`, `startWorkflowExecution`) so `server.ts` and `worker.ts` go through one constructor / one execution helper.
 - Collapsed the duplicated repo/actions/workflow/webhook route table behind `registerRepositoryRoutes(app, deps)`, leaving `server.ts` and `worker.ts` to provide runtime-specific auth, storage, broadcasting, and execution dependencies.
+- Extracted shared auth route wiring behind `registerAuthRoutes(app, deps)`, so Bun/Postgres and Worker/D1 both inject runtime-specific magic-link/JWT behavior while preserving the same auth API and `requireAuth` middleware behavior.
 - 112 unit tests, 4 Playwright e2e tests, and full typecheck + Biome lint all passing.
 
 ## Highest priority task
 <guidance> keep this a low level, the smallest individually testable unit </guidance>
 
-Task: Extract the local Bun auth route wiring into the same dependency style used by the Worker auth wiring, without changing the auth API behavior.
-Verification: `bun run typecheck`, `bun run lint`, `bun run test`, `bun run test:e2e`; browser-smoke magic-link entry or local JWT-authenticated repo load with `agent-browser`.
+Task: Start the `App.tsx` page split by extracting the repository breadcrumb/home-link components into a small module with their existing tests preserved.
+Verification: `bun run typecheck`, `bun run lint`, `bun run test`, `bun run test:e2e`; browser-smoke repo navigation with `agent-browser`.
 
 ## Next Up
 
@@ -48,7 +49,11 @@ Surfaced via `/improve-codebase-architecture`. Ordered by leverage; #1 unblocks 
    - Files: `src/auth-d1.ts` (new), `src/worker.ts`.
    - `auth-d1.ts` now exports a `makeD1AuthDb(d1)` factory peer to `auth.ts`'s Bun/Postgres adapter. `worker.ts` calls `makeD1AuthDb(c.env.DB)` instead of the previous inlined `makeD1Db`. Both adapters are now named, file-level, and visually parallel to the `workflow-db.ts` / `workflow-db-d1.ts` pair.
 
-4. **Break up `App.tsx` (1740 lines) into per-page modules.**
+4. **Extract shared auth route wiring.** *(done)*
+   - Files: `src/auth-routes.ts`, `src/server.ts`, `src/worker.ts`.
+   - `auth-routes.ts` now owns `POST /api/auth/request-link`, `GET /api/auth/verify`, and the shared Bearer-token `requireAuth` middleware. `server.ts` injects the local Bun/Postgres wrapper functions from `auth.ts`; `worker.ts` injects D1-backed `auth-core` calls plus Worker secrets from `c.env`.
+
+5. **Break up `App.tsx` (1740 lines) into per-page modules.**
    - Files: `src/App.tsx`.
    - Problem: declares 9 inline subcomponents (`AuthForm`, `RepoBreadcrumb`, `ReadmePreview`, `RepoList`, `LineNumberedCode`, `WorkflowEditor`, `RunDetail`, `ActionsTab`, `RepoBrowser`) plus status-icon helpers, and runs ~4 state machines (auth, route, repo overview, runs) cascading via prop callbacks. Subcomponents can't be tested in isolation — `App.test.tsx` reaches them through the megacomponent surface.
    - Deletion test: real complexity, but concentrated wrong. A page-shaped split (`RepoListPage`, `RepoDetailPage`, `ActionsPage`) lets each page be tested through its own interface.
