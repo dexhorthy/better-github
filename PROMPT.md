@@ -1,4 +1,4 @@
-you are working on cloning github
+you are working on creating a minimalist replacement for github.com - a ui for browsing repos and code, private/public repos, basic auth and sign up, adding collaborators to private repos, minimal actions for CI and deployment, etc
 
 <guidance>
 1. code goes in src/
