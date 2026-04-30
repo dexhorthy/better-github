@@ -7,24 +7,17 @@ import { Hono } from "hono";
 import type { MagicLinkResult, VerifyResult } from "./auth-core";
 import { requestMagicLink, verifyMagicLink, verifyToken } from "./auth-core";
 import { makeD1AuthDb } from "./auth-d1";
-import { repositories } from "./data";
 import {
 	deleteWorkflowFile,
 	fetchFreestyleRepoData,
 	fetchWorkflowFiles,
 	saveWorkflowFile,
 } from "./freestyle-git";
-import { buildRepositoryOverview } from "./repository-overview";
-import { verifyWebhookSignature } from "./webhook-signature";
+import { registerRepositoryRoutes } from "./repo-routes";
 import { makeD1WorkflowRunRepo } from "./workflow-db-d1";
 import {
-	DEFAULT_WORKFLOW_CONTENT,
 	deriveTerminalStatus,
 	executeWorkflowRun,
-	newQueuedRun,
-	parseWorkflow,
-	requestCancellation,
-	shouldTrigger,
 	type Workflow,
 	type WorkflowRun,
 	type WorkflowRunResult,
@@ -175,73 +168,6 @@ const requireAuth: MiddlewareHandler<{
 	await next();
 };
 
-app.get("/api/repos", requireAuth, (c) => {
-	return c.json(repositories);
-});
-
-app.get(
-	"/api/repos/:owner/:repo/actions/runs/:runId",
-	requireAuth,
-	async (c) => {
-		const { runId } = c.req.param();
-		const run = await makeD1WorkflowRunRepo(c.env.DB).get(runId);
-		if (!run) return c.json({ message: "Run not found" }, 404);
-		return c.json(run);
-	},
-);
-
-app.get("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
-	const { owner, repo } = c.req.param();
-	const runs = await makeD1WorkflowRunRepo(c.env.DB).list(owner, repo);
-	return c.json(runs);
-});
-
-app.post("/api/repos/:owner/:repo/actions/runs", requireAuth, async (c) => {
-	const { owner, repo } = c.req.param();
-	const body = (await c.req.json().catch(() => ({}))) as {
-		branch?: string;
-		commitSha?: string;
-		workflowContent?: string;
-		rerunOf?: string;
-	};
-
-	const runRepo = makeD1WorkflowRunRepo(c.env.DB);
-	let branch = body.branch ?? "main";
-	let commitSha = body.commitSha ?? "manual";
-
-	if (body.rerunOf) {
-		const originalRun = await runRepo.get(body.rerunOf);
-		if (!originalRun) {
-			return c.json({ error: "Original run not found" }, 404);
-		}
-		branch = originalRun.branch;
-		commitSha = originalRun.commitSha;
-	}
-
-	const workflow = parseWorkflow(
-		body.workflowContent ?? DEFAULT_WORKFLOW_CONTENT,
-	);
-	if (!workflow) {
-		return c.json({ error: "Invalid workflow YAML" }, 400);
-	}
-
-	const run = newQueuedRun({
-		workflowName: workflow.name,
-		repoOwner: owner,
-		repoName: repo,
-		branch,
-		commitSha,
-	});
-
-	await runRepo.insert(run);
-	await broadcaster(run, c.env);
-
-	bridgeFreestyleEnv(c.env);
-	startWorkflowExecution(c.env, run.id, workflow, branch, commitSha, c);
-
-	return c.json({ id: run.id, status: "queued" }, 201);
-});
-
 function startWorkflowExecution(
 	env: Env,
 	runId: string,
@@ -304,93 +230,6 @@ function startWorkflowExecution(
 	return execPromise;
 }
 
-app.post("/api/webhooks/push", async (c) => {
-	const rawBody = await c.req.text();
-	const signatureHeader = c.req.header("X-Hub-Signature-256");
-
-	const isValid = await verifyWebhookSignature(
-		rawBody,
-		signatureHeader,
-		c.env.WEBHOOK_SECRET,
-	);
-	if (!isValid) {
-		return c.json({ error: "Invalid webhook signature" }, 401);
-	}
-
-	let body: {
-		owner?: string;
-		repo?: string;
-		branch?: string;
-		commitSha?: string;
-	};
-	try {
-		body = JSON.parse(rawBody);
-	} catch {
-		return c.json({ error: "Invalid JSON body" }, 400);
-	}
-
-	const { owner, repo, branch, commitSha } = body;
-	if (!owner || !repo || !branch || !commitSha) {
-		return c.json(
-			{ error: "Missing required fields: owner, repo, branch, commitSha" },
-			400,
-		);
-	}
-
-	bridgeFreestyleEnv(c.env);
-	const workflowFiles = await workflowFileFetcher(repo);
-	if (workflowFiles.length === 0) {
-		return c.json({ message: "No workflows found", triggered: [] });
-	}
-
-	const runRepo = makeD1WorkflowRunRepo(c.env.DB);
-	const triggered: { id: string; workflowName: string }[] = [];
-	for (const wf of workflowFiles) {
-		const workflow = parseWorkflow(wf.content);
-		if (!workflow) continue;
-		if (!shouldTrigger(workflow, "push", branch)) continue;
-
-		const run = newQueuedRun({
-			workflowName: workflow.name,
-			repoOwner: owner,
-			repoName: repo,
-			branch,
-			commitSha,
-		});
-		await runRepo.insert(run);
-		await broadcaster(run, c.env);
-		triggered.push({ id: run.id, workflowName: workflow.name });
-		startWorkflowExecution(c.env, run.id, workflow, branch, commitSha, c);
-	}
-
-	return c.json({ message: "Push event processed", triggered });
-});
-
-app.post(
-	"/api/repos/:owner/:repo/actions/runs/:runId/cancel",
-	requireAuth,
-	async (c) => {
-		const { runId } = c.req.param();
-		const runRepo = makeD1WorkflowRunRepo(c.env.DB);
-		const run = await runRepo.get(runId);
-		if (!run) return c.json({ error: "Run not found" }, 404);
-		if (run.status !== "queued" && run.status !== "in_progress") {
-			return c.json({ error: "Run is not cancellable" }, 400);
-		}
-		requestCancellation(runId);
-		if (run.status === "queued") {
-			await runRepo.update(runId, {
-				status: "cancelled",
-				conclusion: "cancelled",
-				completedAt: new Date().toISOString(),
-			});
-			const cancelled = await runRepo.get(runId);
-			if (cancelled) await broadcaster(cancelled, c.env);
-		}
-		return c.json({ ok: true });
-	},
-);
-
 function bridgeFreestyleEnv(env: Env): void {
 	if (env.FREESTYLE_API_KEY) {
 		process.env.FREESTYLE_API_KEY = env.FREESTYLE_API_KEY;
@@ -400,72 +239,37 @@ function bridgeFreestyleEnv(env: Env): void {
 	}
 }
 
-app.get("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
-	const { repo } = c.req.param();
-	bridgeFreestyleEnv(c.env);
-	const workflowFiles = await fetchWorkflowFiles(repo);
-	return c.json(workflowFiles);
-});
-
-app.post("/api/repos/:owner/:repo/workflows", requireAuth, async (c) => {
-	const { repo } = c.req.param();
-	const body = (await c.req.json().catch(() => ({}))) as {
-		name?: string;
-		content?: string;
-	};
-
-	if (!body.name) return c.json({ error: "Missing name" }, 400);
-	if (!body.content) return c.json({ error: "Missing content" }, 400);
-
-	let fileName = body.name;
-	if (!fileName.endsWith(".yml") && !fileName.endsWith(".yaml")) {
-		fileName = `${fileName}.yml`;
-	}
-
-	bridgeFreestyleEnv(c.env);
-	const result = await saveWorkflowFile(repo, fileName, body.content);
-	if (!result.ok) return c.json({ error: result.error }, 500);
-	return c.json({ ok: true, name: fileName }, 201);
-});
-
-app.put("/api/repos/:owner/:repo/workflows/:name", requireAuth, async (c) => {
-	const { repo, name } = c.req.param();
-	const body = (await c.req.json().catch(() => ({}))) as { content?: string };
-
-	if (!body.content) return c.json({ error: "Missing content" }, 400);
-
-	bridgeFreestyleEnv(c.env);
-	const result = await saveWorkflowFile(repo, name, body.content);
-	if (!result.ok) return c.json({ error: result.error }, 500);
-	return c.json({ ok: true });
-});
-
-app.delete(
-	"/api/repos/:owner/:repo/workflows/:name",
+registerRepositoryRoutes(app, {
 	requireAuth,
-	async (c) => {
-		const { repo, name } = c.req.param();
+	getRunRepo: (c) => makeD1WorkflowRunRepo(c.env.DB),
+	fetchRepoData: (repo, path, c) => {
 		bridgeFreestyleEnv(c.env);
-		const result = await deleteWorkflowFile(repo, name);
-		if (!result.ok) return c.json({ error: result.error }, 500);
-		return c.json({ ok: true });
+		return fetchFreestyleRepoData(repo, path);
 	},
-);
-
-app.get("/api/repos/:owner/:repo", requireAuth, async (c) => {
-	const { owner, repo } = c.req.param();
-	const path = c.req.query("path") ?? "";
-	const fixture = repositories.find(
-		(item) => item.owner === owner && item.name === repo,
-	);
-
-	if (!fixture) {
-		return c.json({ message: "Repository not found" }, 404);
-	}
-
-	bridgeFreestyleEnv(c.env);
-	const liveData = await fetchFreestyleRepoData(repo, path);
-	return c.json(buildRepositoryOverview(fixture, path, liveData));
+	fetchWorkflowFiles: (repo, c) => {
+		bridgeFreestyleEnv(c.env);
+		return workflowFileFetcher(repo);
+	},
+	saveWorkflowFile: (repo, fileName, content, c) => {
+		bridgeFreestyleEnv(c.env);
+		return saveWorkflowFile(repo, fileName, content);
+	},
+	deleteWorkflowFile: (repo, fileName, c) => {
+		bridgeFreestyleEnv(c.env);
+		return deleteWorkflowFile(repo, fileName);
+	},
+	startWorkflowExecution: (c, runId, workflow, branch, commitSha) => {
+		bridgeFreestyleEnv(c.env);
+		startWorkflowExecution(c.env, runId, workflow, branch, commitSha, c);
+	},
+	broadcastRun: (run, c) => broadcaster(run, c.env),
+	updateAndBroadcastRun: async (c, runId, updates) => {
+		const runRepo = makeD1WorkflowRunRepo(c.env.DB);
+		await runRepo.update(runId, updates);
+		const run = await runRepo.get(runId);
+		if (run) await broadcaster(run, c.env);
+	},
+	webhookSecret: (c) => c.env.WEBHOOK_SECRET,
 });
 
 export default {

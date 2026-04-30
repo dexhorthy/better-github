@@ -8,6 +8,7 @@
 - Browser QA surfaced that older/stale API processes may return `steps` as a JSON-encoded string; the UI expects an array. The API normalization now handles double-encoded step JSON before returning run details.
 - For deployed Worker Actions write-route verification, created a temporary AgentMail inbox, requested a magic link from `https://better-github.dexter-de6.workers.dev/api/auth/request-link`, opened the received `/?token=...` URL with `npx agent-browser`, navigated to `dexhorthy/better-github` → Actions, and confirmed clicking "Run workflow" rendered a new queued `CI` run.
 - Remote D1 initially returned 500 for `GET /api/repos/:owner/:repo/actions/runs` because the already-applied production `0001` migration did not include `workflow_runs`; adding and applying `migrations/0002_workflow_runs.sql` fixed the deployed Actions page.
+- For shared route-table verification after extracting `src/repo-routes.ts`, `npx agent-browser skills get core` was not available in the installed CLI, but `npx agent-browser --help` matched the documented command set. Browser-smoked `http://127.0.0.1:5173/dexhorthy/better-github` with a locally signed dev JWT in `localStorage`, then verified the Code tab rendered, the Actions tab loaded run rows through the shared route, and "View workflows" loaded `ci.yml` / `deploy.yml` through the shared workflow routes.
 
 Sources checked on 2026-04-29:
 
