@@ -248,36 +248,46 @@ test("POST actions/runs creates a queued workflow run in D1", async () => {
 	const token = await signJwt({ email: "test@example.com" }, jwtSecret);
 	const rows: Row[] = [];
 	const db = makeFakeD1(rows);
+	setWorkflowExecutor(async () => ({
+		success: true,
+		cancelled: false,
+		logs: "ok",
+		steps: [],
+	}));
 
-	const res = await workerApp.fetch(
-		new Request(
-			"http://localhost/api/repos/dexhorthy/better-github/actions/runs",
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${token}`,
-					"Content-Type": "application/json",
+	try {
+		const res = await workerApp.fetch(
+			new Request(
+				"http://localhost/api/repos/dexhorthy/better-github/actions/runs",
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						branch: "main",
+						commitSha: "abc123",
+						workflowContent:
+							"name: Worker CI\non:\n  push:\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Test\n        run: bun test",
+					}),
 				},
-				body: JSON.stringify({
-					branch: "main",
-					commitSha: "abc123",
-					workflowContent:
-						"name: Worker CI\non:\n  push:\njobs:\n  test:\n    runs-on: freestyle-vm\n    steps:\n      - name: Test\n        run: bun test",
-				}),
-			},
-		),
-		{ DB: db, JWT_SECRET: jwtSecret },
-	);
+			),
+			{ DB: db, JWT_SECRET: jwtSecret },
+		);
 
-	expect(res.status).toBe(201);
-	const body = (await res.json()) as { id: string; status: string };
-	expect(body.id).toBeString();
-	expect(body.status).toBe("queued");
-	expect(rows).toHaveLength(1);
-	expect(rows[0]?.id).toBe(body.id);
-	expect(rows[0]?.workflow_name).toBe("Worker CI");
-	const pending = _getLastRunPromise();
-	if (pending) await pending.catch(() => {});
+		expect(res.status).toBe(201);
+		const body = (await res.json()) as { id: string; status: string };
+		expect(body.id).toBeString();
+		expect(body.status).toBe("queued");
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.id).toBe(body.id);
+		expect(rows[0]?.workflow_name).toBe("Worker CI");
+		const pending = _getLastRunPromise();
+		if (pending) await pending.catch(() => {});
+	} finally {
+		resetWorkflowExecutor();
+	}
 });
 
 test("GET workflows returns 401 without auth", async () => {

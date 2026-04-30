@@ -10,8 +10,9 @@
 - Remote D1 initially returned 500 for `GET /api/repos/:owner/:repo/actions/runs` because the already-applied production `0001` migration did not include `workflow_runs`; adding and applying `migrations/0002_workflow_runs.sql` fixed the deployed Actions page.
 - For shared route-table verification after extracting `src/repo-routes.ts`, `npx agent-browser skills get core` was not available in the installed CLI, but `npx agent-browser --help` matched the documented command set. Browser-smoked `http://127.0.0.1:5173/dexhorthy/better-github` with a locally signed dev JWT in `localStorage`, then verified the Code tab rendered, the Actions tab loaded run rows through the shared route, and "View workflows" loaded `ci.yml` / `deploy.yml` through the shared workflow routes.
 - For shared auth route verification after extracting `src/auth-routes.ts`, the installed `agent-browser` binary still does not expose `skills get core`; `agent-browser --help` remains the available source for command syntax. Browser-smoked `http://127.0.0.1:5173/dexhorthy/better-github` with a locally signed dev JWT in `localStorage` and confirmed the authenticated repository page loaded through the shared `requireAuth` middleware.
+- For `src/repo-navigation.tsx` extraction verification, browser-smoked `http://127.0.0.1:5173/dexhorthy/better-github?path=src/App.tsx` with a locally signed dev JWT in `localStorage`. Confirmed the extracted repository breadcrumb rendered, clicking the repo home link reset from the file viewer to `/dexhorthy/better-github` with README visible, and clicking "Better GitHub" returned to `/` with two repository list items.
 
-Sources checked on 2026-04-29:
+Sources checked on 2026-04-30:
 
 - `npx agent-browser --help`
 - Local browser verification against `http://127.0.0.1:5173/`

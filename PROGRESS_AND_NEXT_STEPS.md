@@ -19,12 +19,13 @@ See [DONE.md](./DONE.md) for the full chronological log. High-level summary:
 - Extracted shared workflow lifecycle helpers (`newQueuedRun`, `DEFAULT_WORKFLOW_CONTENT`, `deriveTerminalStatus`, `startWorkflowExecution`) so `server.ts` and `worker.ts` go through one constructor / one execution helper.
 - Collapsed the duplicated repo/actions/workflow/webhook route table behind `registerRepositoryRoutes(app, deps)`, leaving `server.ts` and `worker.ts` to provide runtime-specific auth, storage, broadcasting, and execution dependencies.
 - Extracted shared auth route wiring behind `registerAuthRoutes(app, deps)`, so Bun/Postgres and Worker/D1 both inject runtime-specific magic-link/JWT behavior while preserving the same auth API and `requireAuth` middleware behavior.
+- Started the `App.tsx` page split by extracting `RepoBreadcrumb` and `RepoHomeLink` into `src/repo-navigation.tsx`, with their tests moved to `src/repo-navigation.test.tsx`.
 - 112 unit tests, 4 Playwright e2e tests, and full typecheck + Biome lint all passing.
 
 ## Highest priority task
 <guidance> keep this a low level, the smallest individually testable unit </guidance>
 
-Task: Start the `App.tsx` page split by extracting the repository breadcrumb/home-link components into a small module with their existing tests preserved.
+Task: Continue the `App.tsx` page split by extracting the README preview and line-numbered code viewer into a small presentation module with their existing tests preserved.
 Verification: `bun run typecheck`, `bun run lint`, `bun run test`, `bun run test:e2e`; browser-smoke repo navigation with `agent-browser`.
 
 ## Next Up
